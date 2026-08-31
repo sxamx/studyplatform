@@ -33,6 +33,22 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   });
 }
 
+export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return next();
+  }
+
+  jwt.verify(token, config.jwtSecret, (err, decoded) => {
+    if (!err && decoded) {
+      req.user = decoded as AuthUser;
+    }
+    next();
+  });
+}
+
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
   if (!req.user || req.user.role !== 'ADMIN') {
     res.status(403).json({ error: 'Admin access required' });

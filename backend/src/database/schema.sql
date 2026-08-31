@@ -13,11 +13,24 @@ CREATE TABLE IF NOT EXISTS users (
   is_active INTEGER DEFAULT 1
 );
 
-CREATE TABLE IF NOT EXISTS courses (
+CREATE TABLE IF NOT EXISTS learning_tracks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
   slug TEXT UNIQUE,
+  icon TEXT,
+  order_index INTEGER DEFAULT 0,
+  is_published INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  track_id TEXT REFERENCES learning_tracks(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  slug TEXT UNIQUE,
+  thumbnail_url TEXT,
   created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -25,9 +38,21 @@ CREATE TABLE IF NOT EXISTS courses (
   order_index INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS modules (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  order_index INTEGER NOT NULL DEFAULT 1,
+  estimated_hours REAL DEFAULT 5,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS lessons (
   id TEXT PRIMARY KEY,
   course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  module_id TEXT REFERENCES modules(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   order_index INTEGER NOT NULL,
@@ -70,6 +95,54 @@ CREATE TABLE IF NOT EXISTS user_progress (
   UNIQUE(user_id, lesson_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_course_preferences (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'archived', 'wishlisted')),
+  archived_at DATETIME,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, course_id)
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_courses (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL UNIQUE REFERENCES courses(id) ON DELETE CASCADE,
+  creator_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  thumbnail_url TEXT,
+  price REAL NOT NULL DEFAULT 0.0,
+  currency TEXT DEFAULT 'USD',
+  purchase_count INTEGER DEFAULT 0,
+  average_rating REAL DEFAULT 5.0,
+  is_active INTEGER DEFAULT 1,
+  published_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_purchases (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  marketplace_course_id TEXT NOT NULL REFERENCES marketplace_courses(id) ON DELETE CASCADE,
+  price_paid REAL NOT NULL DEFAULT 0.0,
+  currency TEXT DEFAULT 'USD',
+  purchased_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  access_expires_at DATETIME,
+  UNIQUE(user_id, marketplace_course_id)
+);
+
+CREATE TABLE IF NOT EXISTS marketplace_reviews (
+  id TEXT PRIMARY KEY,
+  marketplace_course_id TEXT NOT NULL REFERENCES marketplace_courses(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  review_text TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, marketplace_course_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES users(id),
@@ -82,5 +155,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_module ON lessons(module_id);
+CREATE INDEX IF NOT EXISTS idx_modules_course ON modules(course_id);
 CREATE INDEX IF NOT EXISTS idx_progress_user ON user_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_progress_course ON user_progress(course_id);
+CREATE INDEX IF NOT EXISTS idx_user_course_pref ON user_course_preferences(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_marketplace_courses ON marketplace_courses(is_active);

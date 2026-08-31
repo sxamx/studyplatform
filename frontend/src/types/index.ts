@@ -116,13 +116,13 @@ export interface LessonData {
   id: string;
   title: string;
   description?: string;
-  order?: number;
+  order: number;
   estimatedMinutes?: number;
   blocks: Block[];
 }
 
-export interface LessonPayload {
-  version: '1.0';
+export interface LessonJSON {
+  version: string;
   lesson: LessonData;
 }
 
@@ -134,29 +134,46 @@ export interface User {
   themePreference: 'light' | 'dark' | 'system';
 }
 
-export interface Course {
+export interface Module {
   id: string;
+  courseId: string;
   title: string;
   description?: string;
-  slug?: string;
-  isPublished: boolean;
-  totalLessons: number;
-  completedLessons: number;
-  progressPercent: number;
-  createdAt?: string;
+  order: number;
+  estimatedHours?: number;
+  lessons?: LessonSummary[];
 }
 
 export interface LessonSummary {
   id: string;
+  moduleId?: string | null;
   title: string;
-  description?: string;
+  description: string;
   order: number;
   estimatedMinutes: number;
   isCompleted: boolean;
   score: number;
 }
 
+export interface Course {
+  id: string;
+  trackId?: string | null;
+  title: string;
+  description: string;
+  slug?: string;
+  thumbnailUrl?: string;
+  isPublished: boolean;
+  totalLessons: number;
+  totalModules?: number;
+  completedLessons: number;
+  progressPercent: number;
+  preferenceStatus?: 'in_progress' | 'completed' | 'archived' | 'wishlisted';
+  preferenceNotes?: string;
+  createdAt?: string;
+}
+
 export interface CourseDetail extends Course {
+  modules?: Module[];
   lessons: LessonSummary[];
 }
 
@@ -165,20 +182,46 @@ export interface LessonDetail {
   courseId: string;
   courseTitle: string;
   title: string;
-  description?: string;
+  description: string;
   order: number;
   estimatedMinutes: number;
-  content: LessonPayload | null;
+  content: LessonJSON;
   progress: {
     completed: boolean;
-    completedAt: string;
+    completedAt?: string;
     score: number;
-    answers: Record<string, any>;
+    answers?: Record<string, any>;
   } | null;
   nav: {
     prev: { id: string; title: string } | null;
     next: { id: string; title: string } | null;
   };
+}
+
+export interface MarketplaceCourse {
+  id: string;
+  courseId: string;
+  title: string;
+  description: string;
+  thumbnailUrl?: string;
+  price: number;
+  currency: string;
+  purchaseCount: number;
+  averageRating: number;
+  totalLessons: number;
+  creatorName: string;
+  publishedAt: string;
+  isPurchased?: boolean;
+  reviews?: MarketplaceReview[];
+}
+
+export interface MarketplaceReview {
+  id: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  reviewText?: string;
+  createdAt: string;
 }
 
 export interface AdminStats {

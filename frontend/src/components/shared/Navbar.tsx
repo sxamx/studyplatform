@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, PlusCircle } from 'lucide-react';
+import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
@@ -30,7 +30,7 @@ export const Navbar: React.FC = () => {
               StudyPlatform
             </span>
             <span className="text-[10px] text-[#666666] dark:text-[#999999] font-medium tracking-wide uppercase mt-0.5">
-              Aprende con JSON
+              Aprende
             </span>
           </div>
         </Link>
@@ -46,11 +46,34 @@ export const Navbar: React.FC = () => {
             }`}
           >
             <BookOpen className="w-4 h-4" />
-            <span>Cursos</span>
+            <span>Mis Cursos</span>
+          </Link>
+
+          <Link
+            to="/marketplace"
+            className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              isActive('/marketplace')
+                ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
+                : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Marketplace</span>
           </Link>
 
           {user?.role === 'ADMIN' && (
             <>
+              <Link
+                to="/admin/wizard"
+                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                  isActive('/admin/wizard')
+                    ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
+                    : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>Asistente de Curso</span>
+              </Link>
               <Link
                 to="/admin"
                 className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
@@ -61,17 +84,6 @@ export const Navbar: React.FC = () => {
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Admin Panel</span>
-              </Link>
-              <Link
-                to="/admin/upload-json"
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  isActive('/admin/upload-json')
-                    ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
-                    : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
-                }`}
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Subir JSON</span>
               </Link>
             </>
           )}
@@ -105,7 +117,7 @@ export const Navbar: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
-                Ingresar
+                Iniciar Sesión
               </Button>
               <Button variant="primary" size="sm" onClick={() => navigate('/register')}>
                 Registrarse

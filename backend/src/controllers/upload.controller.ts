@@ -7,7 +7,7 @@ import { LessonJsonSchema } from '../schemas/lesson.schema';
 
 export class UploadController {
   static async uploadJson(req: AuthRequest, res: Response) {
-    const { courseId, lessonTitle } = req.body;
+    const { courseId, moduleId, lessonTitle } = req.body;
     const file = req.file;
 
     let jsonData: any;
@@ -66,16 +66,16 @@ export class UploadController {
       const existingLesson = db.prepare('SELECT id FROM lessons WHERE id = ?').get(lessonId);
       if (existingLesson) {
         db.prepare(
-          'UPDATE lessons SET title = ?, description = ?, order_index = ?, estimated_minutes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-        ).run(title, validatedData.lesson.description || '', order, estMin, lessonId);
+          'UPDATE lessons SET title = ?, description = ?, module_id = COALESCE(?, module_id), order_index = ?, estimated_minutes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).run(title, validatedData.lesson.description || '', moduleId || null, order, estMin, lessonId);
 
         db.prepare(
           'INSERT OR REPLACE INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES ((SELECT id FROM lesson_content WHERE lesson_id = ?), ?, ?, 1, CURRENT_TIMESTAMP)'
         ).run(lessonId, lessonId, JSON.stringify(validatedData));
       } else {
         db.prepare(
-          'INSERT INTO lessons (id, course_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(lessonId, targetCourseId, title, validatedData.lesson.description || '', order, estMin);
+          'INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(lessonId, targetCourseId, moduleId || null, title, validatedData.lesson.description || '', order, estMin);
 
         db.prepare(
           'INSERT INTO lesson_content (id, lesson_id, content, version) VALUES (?, ?, ?, 1)'

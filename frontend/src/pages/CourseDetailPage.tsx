@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle2, ArrowLeft, Play } from 'lucide-react';
+import { Clock, CheckCircle2, ArrowLeft, Play, Layers } from 'lucide-react';
 import { useCourseStore } from '../stores/courseStore';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
@@ -30,6 +30,8 @@ export const CourseDetailPage: React.FC = () => {
   const totalMinutes = activeCourse.lessons.reduce((acc, l) => acc + (l.estimatedMinutes || 15), 0);
   const nextLesson = activeCourse.lessons.find((l) => !l.isCompleted) || activeCourse.lessons[0];
 
+  const hasModules = activeCourse.modules && activeCourse.modules.length > 0;
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Back Button */}
@@ -46,6 +48,11 @@ export const CourseDetailPage: React.FC = () => {
         <div className="max-w-3xl space-y-4">
           <div className="flex items-center gap-3">
             <Badge variant="primary">Curso Interactivo</Badge>
+            {hasModules && (
+              <Badge variant="secondary">
+                <Layers className="w-3 h-3 mr-1 inline" /> {activeCourse.modules?.length} Módulos
+              </Badge>
+            )}
             <span className="flex items-center gap-1 text-xs text-[#666666] dark:text-[#B0B0B0]">
               <Clock className="w-3.5 h-3.5" />
               {totalMinutes} min de contenido total
@@ -84,75 +91,136 @@ export const CourseDetailPage: React.FC = () => {
       </Card>
 
       {/* Syllabus / Lessons List */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-[#1A1A1A] dark:text-white tracking-tight">
             Temario del Curso
           </h2>
           <span className="text-xs font-semibold text-[#666666] dark:text-[#808080]">
-            {activeCourse.lessons.length} Módulos
+            {activeCourse.totalLessons} Lecciones en total
           </span>
         </div>
 
-        <div className="space-y-3">
-          {activeCourse.lessons.map((lesson, idx) => {
-            const isCompleted = lesson.isCompleted;
-
-            return (
-              <Card
-                key={lesson.id}
-                hoverable
-                onClick={() => navigate(`/lessons/${lesson.id}`)}
-                className={`p-5 flex items-center justify-between gap-4 transition-all group ${
-                  isCompleted
-                    ? 'border-[#10A950]/30 bg-[#10A950]/5 dark:bg-[#10A950]/10'
-                    : 'hover:border-[#0066CC]'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                      isCompleted
-                        ? 'bg-[#10A950] text-white'
-                        : 'bg-[#F5F5F5] dark:bg-[#242424] text-[#666666] dark:text-[#B0B0B0] group-hover:bg-[#0066CC] group-hover:text-white transition-colors'
-                    }`}
-                  >
-                    {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
-                  </div>
-
+        {hasModules ? (
+          <div className="space-y-6">
+            {activeCourse.modules?.map((module, mIdx) => (
+              <div key={module.id} className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D]">
                   <div>
-                    <h4 className="text-base font-bold text-[#1A1A1A] dark:text-white group-hover:text-[#0066CC] dark:group-hover:text-[#4D94FF] transition-colors">
-                      {lesson.title}
-                    </h4>
-                    {lesson.description && (
-                      <p className="text-xs text-[#666666] dark:text-[#B0B0B0] line-clamp-1 mt-0.5">
-                        {lesson.description}
-                      </p>
+                    <span className="text-xs font-bold text-[#0066CC] dark:text-[#4D94FF] uppercase tracking-wider">
+                      Módulo {mIdx + 1}
+                    </span>
+                    <h3 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
+                      {module.title}
+                    </h3>
+                    {module.description && (
+                      <p className="text-xs text-[#666666] dark:text-[#B0B0B0] mt-0.5">{module.description}</p>
                     )}
                   </div>
+                  {module.estimatedHours && (
+                    <span className="text-xs font-semibold text-gray-400">~{module.estimatedHours} horas</span>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="hidden sm:flex items-center gap-1 text-xs text-[#666666] dark:text-[#808080]">
-                    <Clock className="w-3.5 h-3.5" />
-                    {lesson.estimatedMinutes || 15} min
-                  </span>
+                <div className="space-y-2.5">
+                  {module.lessons?.map((lesson, lIdx) => {
+                    const isCompleted = lesson.isCompleted;
+                    return (
+                      <div
+                        key={lesson.id}
+                        onClick={() => navigate(`/lessons/${lesson.id}`)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                          isCompleted
+                            ? 'bg-[#10A950]/5 dark:bg-[#2ECC71]/5 border-[#10A950]/30 hover:border-[#10A950]'
+                            : 'bg-white dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4 flex-1">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                              isCompleted
+                                ? 'bg-[#10A950] text-white'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : `${mIdx + 1}.${lIdx + 1}`}
+                          </div>
 
-                  <Button
-                    variant={isCompleted ? 'outline' : 'primary'}
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/lessons/${lesson.id}`);
-                    }}
-                  >
-                    {isCompleted ? 'Repasar' : 'Iniciar'}
-                  </Button>
+                          <div>
+                            <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-white">
+                              {lesson.title}
+                            </h4>
+                            <p className="text-xs text-[#666666] dark:text-[#B0B0B0] mt-0.5">
+                              {lesson.description || 'Lección interactiva estructurada'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {lesson.estimatedMinutes} min
+                          </span>
+                          <Button variant={isCompleted ? 'secondary' : 'primary'} size="sm">
+                            {isCompleted ? 'Repasar' : 'Iniciar'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {activeCourse.lessons.map((lesson, idx) => {
+              const isCompleted = lesson.isCompleted;
+              return (
+                <div
+                  key={lesson.id}
+                  onClick={() => navigate(`/lessons/${lesson.id}`)}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                    isCompleted
+                      ? 'bg-[#10A950]/5 dark:bg-[#2ECC71]/5 border-[#10A950]/30 hover:border-[#10A950]'
+                      : 'bg-white dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                        isCompleted
+                          ? 'bg-[#10A950] text-white'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-white">
+                        {lesson.title}
+                      </h4>
+                      <p className="text-xs text-[#666666] dark:text-[#B0B0B0] mt-0.5">
+                        {lesson.description || 'Lección interactiva estructurada'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {lesson.estimatedMinutes} min
+                    </span>
+                    <Button variant={isCompleted ? 'secondary' : 'primary'} size="sm">
+                      {isCompleted ? 'Repasar' : 'Iniciar'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

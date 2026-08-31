@@ -5,6 +5,7 @@ import { twMerge } from 'tailwind-merge';
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
   size?: 'sm' | 'md' | 'lg';
+  fullWidth?: boolean;
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
@@ -14,6 +15,7 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   variant = 'primary',
   size = 'md',
+  fullWidth = false,
   isLoading = false,
   leftIcon,
   rightIcon,
@@ -40,17 +42,27 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={twMerge(clsx(baseStyles, sizeStyles[size], variantStyles[variant], className))}
+      className={twMerge(
+        clsx(
+          baseStyles,
+          sizeStyles[size],
+          variantStyles[variant],
+          fullWidth && 'w-full',
+          className
+        )
+      )}
       disabled={disabled || isLoading}
       {...props}
     >
       {isLoading ? (
-        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-      ) : leftIcon ? (
-        <span className="flex-shrink-0">{leftIcon}</span>
-      ) : null}
-      <span>{children}</span>
-      {!isLoading && rightIcon && <span className="flex-shrink-0">{rightIcon}</span>}
+        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <>
+          {leftIcon && <span className="shrink-0">{leftIcon}</span>}
+          <span>{children}</span>
+          {rightIcon && <span className="shrink-0">{rightIcon}</span>}
+        </>
+      )}
     </button>
   );
 };

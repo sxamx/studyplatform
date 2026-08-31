@@ -9,6 +9,9 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { UploadJSONPage } from './pages/UploadJSONPage';
+import { CourseWizardPage } from './pages/CourseWizardPage';
+import { MarketplacePage } from './pages/MarketplacePage';
+import { MarketplaceDetailPage } from './pages/MarketplaceDetailPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
@@ -55,6 +58,8 @@ export const App: React.FC = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/marketplace" element={<MarketplacePage />} />
+          <Route path="/marketplace/:id" element={<MarketplaceDetailPage />} />
           <Route
             path="/courses/:id"
             element={
@@ -76,6 +81,14 @@ export const App: React.FC = () => {
             element={
               <AdminRoute>
                 <AdminDashboardPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/wizard"
+            element={
+              <AdminRoute>
+                <CourseWizardPage />
               </AdminRoute>
             }
           />
