@@ -1,0 +1,14 @@
+name = studyplatform-api
+main = src/server.ts
+compatibility_date = 2024-08-30
+compatibility_flags = [nodejs_compat]
+
+[vars]
+NODE_ENV = production
+ADMIN_EMAIL = admin@studyplatform.com
+JWT_EXPIRES_IN = 7d
+
+[[d1_databases]]
+binding = DB
+database_name = studyplatform_d1
+database_id = your-d1-database-uuid

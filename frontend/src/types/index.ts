@@ -1,0 +1,191 @@
+export type BlockType =
+  | 'text'
+  | 'heading'
+  | 'code'
+  | 'image'
+  | 'video'
+  | 'question_choice'
+  | 'question_free'
+  | 'quiz'
+  | 'info';
+
+export interface TextBlock {
+  type: 'text';
+  id: string;
+  content: string;
+}
+
+export interface HeadingBlock {
+  type: 'heading';
+  id: string;
+  level: 1 | 2 | 3 | 4 | 5 | 6;
+  content: string;
+}
+
+export interface CodeBlock {
+  type: 'code';
+  id: string;
+  language: string;
+  code: string;
+  copyable?: boolean;
+}
+
+export interface ImageBlock {
+  type: 'image';
+  id: string;
+  url: string;
+  alt: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface VideoBlock {
+  type: 'video';
+  id: string;
+  url: string;
+  title: string;
+  duration?: string;
+  thumbnail?: string;
+}
+
+export interface ChoiceOption {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface QuestionChoiceBlock {
+  type: 'question_choice';
+  id: string;
+  question: string;
+  options: ChoiceOption[];
+  explanation: string;
+  required?: boolean;
+}
+
+export interface QuestionFreeBlock {
+  type: 'question_free';
+  id: string;
+  question: string;
+  expectedAnswer: string;
+  maxLength?: number;
+  language?: string;
+  hint?: string;
+  required?: boolean;
+}
+
+export interface QuizQuestion {
+  id: string;
+  type: 'choice';
+  question: string;
+  options: ChoiceOption[];
+  explanation?: string;
+}
+
+export interface QuizBlock {
+  type: 'quiz';
+  id: string;
+  title: string;
+  description?: string;
+  questions: QuizQuestion[];
+  passingScore?: number;
+  required?: boolean;
+}
+
+export interface InfoBlock {
+  type: 'info';
+  id: string;
+  level?: 'info' | 'warning' | 'success' | 'error';
+  title?: string;
+  message: string;
+}
+
+export type Block =
+  | TextBlock
+  | HeadingBlock
+  | CodeBlock
+  | ImageBlock
+  | VideoBlock
+  | QuestionChoiceBlock
+  | QuestionFreeBlock
+  | QuizBlock
+  | InfoBlock;
+
+export interface LessonData {
+  id: string;
+  title: string;
+  description?: string;
+  order?: number;
+  estimatedMinutes?: number;
+  blocks: Block[];
+}
+
+export interface LessonPayload {
+  version: '1.0';
+  lesson: LessonData;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  fullName?: string;
+  role: 'ADMIN' | 'USER';
+  themePreference: 'light' | 'dark' | 'system';
+}
+
+export interface Course {
+  id: string;
+  title: string;
+  description?: string;
+  slug?: string;
+  isPublished: boolean;
+  totalLessons: number;
+  completedLessons: number;
+  progressPercent: number;
+  createdAt?: string;
+}
+
+export interface LessonSummary {
+  id: string;
+  title: string;
+  description?: string;
+  order: number;
+  estimatedMinutes: number;
+  isCompleted: boolean;
+  score: number;
+}
+
+export interface CourseDetail extends Course {
+  lessons: LessonSummary[];
+}
+
+export interface LessonDetail {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  description?: string;
+  order: number;
+  estimatedMinutes: number;
+  content: LessonPayload | null;
+  progress: {
+    completed: boolean;
+    completedAt: string;
+    score: number;
+    answers: Record<string, any>;
+  } | null;
+  nav: {
+    prev: { id: string; title: string } | null;
+    next: { id: string; title: string } | null;
+  };
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  totalCourses: number;
+  totalLessons: number;
+  activeUsersThisWeek: number;
+  averageCompletionRate: number;
+  completedLessonsTotal: number;
+}

@@ -1,0 +1,25 @@
+{
+  "name": "studyplatform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plataforma de estudio interactiva estilo Duolingo alimentada por JSON",
+  "scripts": {
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "node scripts/dev.js",
+    "seed": "npm run seed --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build": "npm run build:backend && npm run build:frontend"
+  },
+  "keywords": [
+    "duolingo",
+    "study-platform",
+    "json-driven",
+    "interactive-learning",
+    "sqlite",
+    "cloudflare-workers"
+  ],
+  "author": "",
+  "license": "MIT"
+}

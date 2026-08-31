@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "lesson": {
+    "id": "lesson_java_strings_001",
+    "title": "Strings y Cadenas de Texto",
+    "description": "Aprende a manipular texto en Java, inmutabilidad y comparaciones.",
+    "order": 4,
+    "estimatedMinutes": 12,
+    "blocks": [
+      {
+        "type": "heading",
+        "id": "strings_h1",
+        "level": 1,
+        "content": "Manipulación de Strings"
+      },
+      {
+        "type": "text",
+        "id": "strings_t1",
+        "content": "En Java, las cadenas de texto son objetos de la clase String..."
+      },
+      {
+        "type": "code",
+        "id": "strings_c1",
+        "language": "java",
+        "code": "String s = \"hola\";\ns = s + \" mundo\";",
+        "copyable": true
+      },
+      {
+        "type": "info",
+        "id": "strings_i1",
+        "level": "warning",
+        "title": "Comparación de Strings",
+        "message": "¡No uses == para comparar el contenido de dos Strings! Usa siempre el método .equals()."
+      },
+      {
+        "type": "question_choice",
+        "id": "strings_q1",
+        "question": "¿Cuál es el resultado de comparar dos Strings usando el operador ==?",
+        "options": [
+          {
+            "id": "o1",
+            "text": "Compara si ambos objetos ocupan la misma dirección de memoria.",
+            "isCorrect": true
+          },
+          {
+            "id": "o2",
+            "text": "Compara si el contenido de los textos es idéntico.",
+            "isCorrect": false
+          }
+        ],
+        "explanation": "El operador == compara la referencia en memoria. Para comparar el contenido de texto debes usar .equals().",
+        "required": true
+      }
+    ]
+  }
+}
