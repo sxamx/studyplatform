@@ -62,11 +62,12 @@ export const QuestionChoiceBlockSchema = z.object({
   type: z.literal('question_choice'),
   id: z.string().min(1),
   question: z.string().min(1),
+  multiple: z.boolean().optional().default(false),
   options: z.array(QuestionChoiceOptionSchema)
     .min(2, 'Must have at least 2 options')
-    .max(6, 'Cannot exceed 6 options')
-    .refine(opts => opts.filter(o => o.isCorrect).length === 1, {
-      message: 'Exactly one option must be marked as correct (isCorrect: true)',
+    .max(8, 'Cannot exceed 8 options')
+    .refine(opts => opts.some(o => o.isCorrect), {
+      message: 'At least one option must be marked as correct (isCorrect: true)',
     }),
   explanation: z.string().min(1, 'Explanation is required'),
   required: z.boolean().default(true),
@@ -103,16 +104,101 @@ export const QuizBlockSchema = z.object({
   required: z.boolean().default(true),
 });
 
-// 9. Info Block
+// 9. Info / Callout Block
 export const InfoBlockSchema = z.object({
   type: z.literal('info'),
   id: z.string().min(1),
-  level: z.enum(['info', 'warning', 'success', 'error']).default('info'),
+  level: z.enum(['info', 'warning', 'success', 'error', 'tip', 'note', 'danger']).default('info'),
   title: z.string().optional(),
   message: z.string().min(1),
 });
 
-// 10. Database Modeler (ER Diagram Canvas) Block
+// 10. Table Block (Freeform N-columns / N-rows)
+export const TableBlockSchema = z.object({
+  type: z.literal('table'),
+  id: z.string().min(1),
+  title: z.string().optional(),
+  headers: z.array(z.string()).min(1, 'Table must have at least 1 column header'),
+  rows: z.array(z.array(z.string())).min(1, 'Table must have at least 1 row'),
+});
+
+// 11. Diagram Block (Mermaid.js vector diagrams)
+export const DiagramBlockSchema = z.object({
+  type: z.literal('diagram'),
+  id: z.string().min(1),
+  title: z.string().optional(),
+  syntax: z.string().min(1, 'Mermaid syntax is required'),
+  caption: z.string().optional(),
+});
+
+// 12. Math Formula Block (LaTeX / KaTeX)
+export const MathBlockSchema = z.object({
+  type: z.literal('math'),
+  id: z.string().min(1),
+  expression: z.string().min(1, 'LaTeX expression is required'),
+  title: z.string().optional(),
+  inline: z.boolean().optional().default(false),
+  explanation: z.string().optional(),
+});
+
+// 13. Tabs Block (Notion/VS Code style interactive code/view tabs)
+export const TabItemSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  content: z.string().min(1),
+  language: z.string().optional(),
+});
+
+export const TabsBlockSchema = z.object({
+  type: z.literal('tabs'),
+  id: z.string().min(1),
+  title: z.string().optional(),
+  tabs: z.array(TabItemSchema).min(1, 'Must contain at least 1 tab'),
+});
+
+// 14. Accordion Block (Collapsible Hint/Details)
+export const AccordionBlockSchema = z.object({
+  type: z.literal('accordion'),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  content: z.string().min(1),
+  defaultOpen: z.boolean().optional().default(false),
+});
+
+// 15. Stepper Block (Step-by-step numbered guide)
+export const StepItemSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  code: z.string().optional(),
+  language: z.string().optional(),
+});
+
+export const StepperBlockSchema = z.object({
+  type: z.literal('stepper'),
+  id: z.string().min(1),
+  title: z.string().optional(),
+  steps: z.array(StepItemSchema).min(1, 'Must contain at least 1 step'),
+});
+
+// 16. Divider Block (Visual section separator)
+export const DividerBlockSchema = z.object({
+  type: z.literal('divider'),
+  id: z.string().min(1),
+  label: z.string().optional(),
+});
+
+// 17. Resource Block (Downloadable files / attachments)
+export const ResourceBlockSchema = z.object({
+  type: z.literal('resource'),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  url: z.string().min(1),
+  fileType: z.string().optional().default('file'),
+  fileSize: z.string().optional(),
+});
+
+// 18. Database Modeler (ER Diagram Canvas) Block
 export const EntityAttributeSchema = z.object({
   name: z.string().min(1),
   type: z.string().min(1).default('VARCHAR(100)'),
@@ -170,7 +256,7 @@ export const DatabaseModelerBlockSchema = z.object({
   required: z.boolean().default(true),
 });
 
-// Discriminated Union of all 10 Blocks
+// Discriminated Union of all Blocks
 export const BlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
   HeadingBlockSchema,
@@ -181,6 +267,14 @@ export const BlockSchema = z.discriminatedUnion('type', [
   QuestionFreeBlockSchema,
   QuizBlockSchema,
   InfoBlockSchema,
+  TableBlockSchema,
+  DiagramBlockSchema,
+  MathBlockSchema,
+  TabsBlockSchema,
+  AccordionBlockSchema,
+  StepperBlockSchema,
+  DividerBlockSchema,
+  ResourceBlockSchema,
   DatabaseModelerBlockSchema,
 ]);
 

@@ -27,6 +27,7 @@ export const CourseModal: React.FC<CourseModalProps> = ({
   const [title, setTitle] = useState(activeCourse?.title || '');
   const [description, setDescription] = useState(activeCourse?.description || '');
   const [isPublished, setIsPublished] = useState(activeCourse?.isPublished ?? true);
+  const [sequentialUnlock, setSequentialUnlock] = useState(activeCourse?.sequentialUnlock ?? false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -36,10 +37,12 @@ export const CourseModal: React.FC<CourseModalProps> = ({
       setTitle(courseToEdit.title);
       setDescription(courseToEdit.description || '');
       setIsPublished(courseToEdit.isPublished);
+      setSequentialUnlock(Boolean(courseToEdit.sequentialUnlock));
     } else {
       setTitle('');
       setDescription('');
       setIsPublished(true);
+      setSequentialUnlock(false);
     }
     setError('');
   }, [courseToEdit, isOpen]);
@@ -58,12 +61,12 @@ export const CourseModal: React.FC<CourseModalProps> = ({
       if (courseToEdit) {
         await apiFetch(`/courses/${courseToEdit.id}`, {
           method: 'PUT',
-          body: JSON.stringify({ title, description, isPublished }),
+          body: JSON.stringify({ title, description, isPublished, sequentialUnlock }),
         });
       } else {
         await apiFetch('/courses', {
           method: 'POST',
-          body: JSON.stringify({ title, description, isPublished }),
+          body: JSON.stringify({ title, description, isPublished, sequentialUnlock }),
         });
       }
       handleSuccess();
@@ -104,17 +107,33 @@ export const CourseModal: React.FC<CourseModalProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 pt-2">
-          <input
-            type="checkbox"
-            id="publish-check"
-            checked={isPublished}
-            onChange={(e) => setIsPublished(e.target.checked)}
-            className="w-4 h-4 text-[#0066CC] rounded border-[#E0E0E0] focus:ring-[#0066CC]"
-          />
-          <label htmlFor="publish-check" className="text-sm font-medium text-[#1A1A1A] dark:text-white cursor-pointer">
-            Publicar curso para estudiantes
-          </label>
+        <div className="space-y-2 pt-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="publish-check"
+              checked={isPublished}
+              onChange={(e) => setIsPublished(e.target.checked)}
+              className="w-4 h-4 text-[#0066CC] rounded border-[#E0E0E0] focus:ring-[#0066CC]"
+            />
+            <label htmlFor="publish-check" className="text-sm font-medium text-[#1A1A1A] dark:text-white cursor-pointer">
+              Publicar curso para estudiantes
+            </label>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40">
+            <input
+              type="checkbox"
+              id="sequential-check"
+              checked={sequentialUnlock}
+              onChange={(e) => setSequentialUnlock(e.target.checked)}
+              className="w-4 h-4 mt-0.5 text-[#0066CC] rounded border-[#E0E0E0] focus:ring-[#0066CC]"
+            />
+            <label htmlFor="sequential-check" className="text-xs text-[#1A1A1A] dark:text-[#E0E0E0] cursor-pointer">
+              <strong className="block text-[#0066CC] dark:text-[#4D94FF] mb-0.5">🔒 Modo de Progreso Secuencial Obligatorio</strong>
+              Exigir que los alumnos completen cada lección para poder desbloquear la siguiente lección en orden.
+            </label>
+          </div>
         </div>
 
         {error && <p className="text-xs text-[#DC3545] font-medium">{error}</p>}

@@ -238,6 +238,92 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
           ],
         };
         break;
+      case 'table':
+        newBlock = {
+          type: 'table',
+          id,
+          title: 'Tabla Comparativa',
+          headers: ['Concepto', 'Opción A', 'Opción B'],
+          rows: [
+            ['Uso Principal', 'Estructura Secuencial', 'Acceso Directo'],
+            ['Rendimiento', 'O(1) inserción', 'O(n) búsqueda'],
+          ],
+        };
+        break;
+      case 'diagram':
+        newBlock = {
+          type: 'diagram',
+          id,
+          title: 'Diagrama de Flujo',
+          syntax: 'graph TD;\n  A[Inicio] --> B{¿Es Válido?};\n  B -- Sí --> C[Procesar];\n  B -- No --> D[Error];',
+          caption: 'Flujo de ejecución paso a paso',
+        };
+        break;
+      case 'math':
+        newBlock = {
+          type: 'math',
+          id,
+          title: 'Fórmula de Complejidad',
+          expression: 'O(n \\log n)',
+          explanation: 'Complejidad temporal de ordenamiento QuickSort / MergeSort',
+        };
+        break;
+      case 'tabs':
+        newBlock = {
+          type: 'tabs',
+          id,
+          title: 'Ejemplo Multilenguaje',
+          tabs: [
+            { id: 'tab_java', label: 'Java', language: 'java', content: 'System.out.println("Hola");' },
+            { id: 'tab_py', label: 'Python', language: 'python', content: 'print("Hola")' },
+          ],
+        };
+        break;
+      case 'accordion':
+        newBlock = {
+          type: 'accordion',
+          id,
+          title: '💡 Pista para Resolver el Ejercicio',
+          content: 'Recuerda verificar si la lista está vacía antes de acceder al primer elemento.',
+          defaultOpen: false,
+        };
+        break;
+      case 'stepper':
+        newBlock = {
+          type: 'stepper',
+          id,
+          title: 'Guía de Implementación',
+          steps: [
+            { title: 'Paso 1: Importar Paquetes', description: 'Agrega las dependencias necesarias en tu archivo.' },
+            { title: 'Paso 2: Crear la Instancia', description: 'Inicializa el objeto en el método principal.', code: 'MyClass obj = new MyClass();' },
+          ],
+        };
+        break;
+      case 'divider':
+        newBlock = {
+          type: 'divider',
+          id,
+          label: 'Siguiente Sección',
+        };
+        break;
+      case 'resource':
+        newBlock = {
+          type: 'resource',
+          id,
+          title: 'Código Fuente del Proyecto',
+          description: 'Descarga el proyecto base completo para IntelliJ o VS Code.',
+          url: 'https://github.com',
+          fileType: 'zip',
+          fileSize: '2.4 MB',
+        };
+        break;
+      default:
+        newBlock = {
+          type: 'text',
+          id,
+          content: 'Nuevo bloque de contenido...',
+        };
+        break;
     }
 
     const blocks = [...lessonData.lesson.blocks, newBlock];

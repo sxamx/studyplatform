@@ -9,6 +9,14 @@ export type BlockType =
   | 'question_free'
   | 'quiz'
   | 'info'
+  | 'table'
+  | 'diagram'
+  | 'math'
+  | 'tabs'
+  | 'accordion'
+  | 'stepper'
+  | 'divider'
+  | 'resource'
   | 'database_modeler';
 
 export interface TextBlock {
@@ -61,6 +69,7 @@ export interface QuestionChoiceBlock {
   type: 'question_choice';
   id: string;
   question: string;
+  multiple?: boolean;
   options: ChoiceOption[];
   explanation: string;
   required?: boolean;
@@ -98,12 +107,97 @@ export interface QuizBlock {
 export interface InfoBlock {
   type: 'info';
   id: string;
-  level?: 'info' | 'warning' | 'success' | 'error';
+  level?: 'info' | 'warning' | 'success' | 'error' | 'tip' | 'note' | 'danger';
   title?: string;
   message: string;
 }
 
-// 10. Database Modeler Block (ER Diagram)
+// 10. Table Block (Freeform N-columns / N-rows)
+export interface TableBlock {
+  type: 'table';
+  id: string;
+  title?: string;
+  headers: string[];
+  rows: string[][];
+}
+
+// 11. Diagram Block (Mermaid.js vector diagrams)
+export interface DiagramBlock {
+  type: 'diagram';
+  id: string;
+  title?: string;
+  syntax: string;
+  caption?: string;
+}
+
+// 12. Math Formula Block (LaTeX / KaTeX)
+export interface MathBlock {
+  type: 'math';
+  id: string;
+  expression: string;
+  title?: string;
+  inline?: boolean;
+  explanation?: string;
+}
+
+// 13. Tabs Block (Notion / VS Code multi-tab container)
+export interface TabItem {
+  id: string;
+  label: string;
+  content: string;
+  language?: string;
+}
+
+export interface TabsBlock {
+  type: 'tabs';
+  id: string;
+  title?: string;
+  tabs: TabItem[];
+}
+
+// 14. Accordion Block (Collapsible hint / deep explanation)
+export interface AccordionBlock {
+  type: 'accordion';
+  id: string;
+  title: string;
+  content: string;
+  defaultOpen?: boolean;
+}
+
+// 15. Stepper Block (Step-by-step numbered guide)
+export interface StepItem {
+  title: string;
+  description: string;
+  code?: string;
+  language?: string;
+}
+
+export interface StepperBlock {
+  type: 'stepper';
+  id: string;
+  title?: string;
+  steps: StepItem[];
+}
+
+// 16. Divider Block (Visual section separator)
+export interface DividerBlock {
+  type: 'divider';
+  id: string;
+  label?: string;
+}
+
+// 17. Resource Block (Downloadable files / attachments)
+export interface ResourceBlock {
+  type: 'resource';
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  fileType?: string;
+  fileSize?: string;
+}
+
+// 18. Database Modeler Block (ER Diagram)
 export interface EntityAttribute {
   name: string;
   type: string;
@@ -172,6 +266,14 @@ export type Block =
   | QuestionFreeBlock
   | QuizBlock
   | InfoBlock
+  | TableBlock
+  | DiagramBlock
+  | MathBlock
+  | TabsBlock
+  | AccordionBlock
+  | StepperBlock
+  | DividerBlock
+  | ResourceBlock
   | DatabaseModelerBlock;
 
 export interface LessonData {
@@ -214,6 +316,7 @@ export interface LessonSummary {
   order: number;
   estimatedMinutes: number;
   isCompleted: boolean;
+  isLocked?: boolean;
   score: number;
 }
 
@@ -225,6 +328,7 @@ export interface Course {
   slug?: string;
   thumbnailUrl?: string;
   isPublished: boolean;
+  sequentialUnlock?: boolean;
   totalLessons: number;
   totalModules?: number;
   completedLessons: number;

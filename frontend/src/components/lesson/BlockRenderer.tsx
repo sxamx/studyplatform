@@ -11,6 +11,14 @@ import { QuestionChoiceBlock } from './blocks/QuestionChoiceBlock';
 import { QuestionFreeBlock } from './blocks/QuestionFreeBlock';
 import { QuizBlock } from './blocks/QuizBlock';
 import { InfoBlock } from './blocks/InfoBlock';
+import { TableBlock } from './blocks/TableBlock';
+import { DiagramBlock } from './blocks/DiagramBlock';
+import { MathBlock } from './blocks/MathBlock';
+import { TabsBlock } from './blocks/TabsBlock';
+import { AccordionBlock } from './blocks/AccordionBlock';
+import { StepperBlock } from './blocks/StepperBlock';
+import { DividerBlock } from './blocks/DividerBlock';
+import { ResourceBlock } from './blocks/ResourceBlock';
 import { DatabaseModelerBlock } from './blocks/DatabaseModelerBlock';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
 
@@ -48,6 +56,22 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
         return <VideoBlock block={block} />;
       case 'document':
         return <DocumentBlock block={block} />;
+      case 'table':
+        return <TableBlock block={block} />;
+      case 'diagram':
+        return <DiagramBlock block={block} />;
+      case 'math':
+        return <MathBlock block={block} />;
+      case 'tabs':
+        return <TabsBlock block={block} />;
+      case 'accordion':
+        return <AccordionBlock block={block} />;
+      case 'stepper':
+        return <StepperBlock block={block} />;
+      case 'divider':
+        return <DividerBlock block={block} />;
+      case 'resource':
+        return <ResourceBlock block={block} />;
       case 'question_choice':
         return (
           <QuestionChoiceBlock

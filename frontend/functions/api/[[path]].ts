@@ -340,6 +340,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           slug: c.slug,
           thumbnailUrl: c.thumbnail_url,
           isPublished: Boolean(c.is_published),
+          sequentialUnlock: Boolean(c.sequential_unlock),
           totalLessons: total,
           totalModules: Number(c.total_modules || 0),
           completedLessons: completed,
@@ -356,15 +357,15 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path === '/courses' && method === 'POST') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado. Se requieren permisos de Administrador.' }, 403);
       const body = await request.json() as any;
-      const { title, description, isPublished, orderIndex, trackId, thumbnailUrl } = body;
+      const { title, description, isPublished, sequentialUnlock, orderIndex, trackId, thumbnailUrl } = body;
       if (!title) return json({ error: 'El título del curso es requerido' }, 400);
 
       const id = crypto.randomUUID();
       const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       await db
-        .prepare('INSERT INTO courses (id, track_id, title, description, slug, thumbnail_url, created_by, is_published, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(id, trackId || null, title, description || '', slug, thumbnailUrl || '', currentUser.id, isPublished !== false ? 1 : 0, orderIndex || 0)
+        .prepare('INSERT INTO courses (id, track_id, title, description, slug, thumbnail_url, created_by, is_published, sequential_unlock, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, trackId || null, title, description || '', slug, thumbnailUrl || '', currentUser.id, isPublished !== false ? 1 : 0, sequentialUnlock ? 1 : 0, orderIndex || 0)
         .run();
 
       // Automatically enroll the course creator so they can preview it in Mis Cursos
@@ -374,7 +375,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ON CONFLICT(user_id, course_id) DO NOTHING
       `).bind(crypto.randomUUID(), currentUser.id, id).run();
 
-      return json({ id, title, description, slug, isPublished: isPublished !== false }, 201);
+      return json({ id, title, description, slug, isPublished: isPublished !== false, sequentialUnlock: Boolean(sequentialUnlock) }, 201);
     }
 
     // -------------------------------------------------------------
@@ -415,16 +416,29 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         completedLessonIds = new Set((upRes.results || []).map((r: any) => r.lesson_id));
       }
 
-      const lessons = (lessonsRes.results || []).map((l: any) => ({
-        id: l.id,
-        moduleId: l.module_id,
-        title: l.title,
-        description: l.description,
-        order: Number(l.order_index),
-        estimatedMinutes: Number(l.estimated_minutes || 15),
-        isCompleted: completedLessonIds.has(l.id),
-        score: completedLessonIds.has(l.id) ? 100 : 0,
-      }));
+      const isSequential = Boolean(course.sequential_unlock) && (!currentUser || currentUser.role !== 'ADMIN');
+      let previousCompleted = true;
+
+      const rawLessons = lessonsRes.results || [];
+      const lessons = rawLessons.map((l: any, idx: number) => {
+        const isCompleted = completedLessonIds.has(l.id);
+        const isLocked = isSequential ? (!previousCompleted && idx > 0) : false;
+        if (!isCompleted) {
+          previousCompleted = false;
+        }
+
+        return {
+          id: l.id,
+          moduleId: l.module_id,
+          title: l.title,
+          description: l.description,
+          order: Number(l.order_index),
+          estimatedMinutes: Number(l.estimated_minutes || 15),
+          isCompleted,
+          isLocked,
+          score: isCompleted ? 100 : 0,
+        };
+      });
 
       const modules = (modulesRes.results || []).map((m: any) => ({
         id: m.id,
@@ -448,6 +462,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         slug: course.slug,
         thumbnailUrl: course.thumbnail_url,
         isPublished: Boolean(course.is_published),
+        sequentialUnlock: Boolean(course.sequential_unlock),
         totalLessons,
         completedLessons,
         progressPercent,
@@ -460,7 +475,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       const courseId = path.replace('/courses/', '');
       const body = await request.json() as any;
-      const { title, description, isPublished, orderIndex, trackId, thumbnailUrl } = body;
+      const { title, description, isPublished, sequentialUnlock, orderIndex, trackId, thumbnailUrl } = body;
 
       await db.prepare(`
         UPDATE courses SET
@@ -469,6 +484,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           track_id = COALESCE(?, track_id),
           thumbnail_url = COALESCE(?, thumbnail_url),
           is_published = COALESCE(?, is_published),
+          sequential_unlock = COALESCE(?, sequential_unlock),
           order_index = COALESCE(?, order_index),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
@@ -478,6 +494,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         trackId ?? null,
         thumbnailUrl ?? null,
         isPublished !== undefined ? (isPublished ? 1 : 0) : null,
+        sequentialUnlock !== undefined ? (sequentialUnlock ? 1 : 0) : null,
         orderIndex ?? null,
         courseId
       ).run();
