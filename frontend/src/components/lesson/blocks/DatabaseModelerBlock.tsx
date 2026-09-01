@@ -15,6 +15,10 @@ import {
   ChevronUp,
   Edit2,
   FileText,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Move,
 } from 'lucide-react';
 import {
   DatabaseModelerBlock as IDatabaseModelerBlock,
@@ -49,14 +53,16 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
         if (parsed.entities && parsed.entities.length > 0) return parsed.entities;
       } catch {}
     }
-    return block.initialEntities || [
-      {
-        id: `ent_1`,
-        name: 'Entidad1',
-        position: { x: 30, y: 30 },
-        attributes: [{ name: 'id', type: 'INTEGER', isPk: true }],
-      },
-    ];
+    return (
+      block.initialEntities || [
+        {
+          id: `ent_1`,
+          name: 'Entidad1',
+          position: { x: 30, y: 30 },
+          attributes: [{ name: 'id', type: 'INTEGER', isPk: true }],
+        },
+      ]
+    );
   };
 
   const getInitialRelationships = (): RelationshipDefinition[] => {
@@ -75,6 +81,17 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
   const [relationships, setRelationships] = useState<RelationshipDefinition[]>(getInitialRelationships);
   const [showHint, setShowHint] = useState(false);
   const [showScenario, setShowScenario] = useState(true);
+
+  // Virtual Canvas: Pan & Zoom State (Infinite Board)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState<number>(1.0);
+
+  // Dragging state (Entity vs Canvas Pan)
+  const [draggingEntityId, setDraggingEntityId] = useState<string | null>(null);
+  const [isPanningCanvas, setIsPanningCanvas] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   // Validation state
   const [validationResults, setValidationResults] = useState<{
@@ -106,38 +123,74 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
   const [relTargetId, setRelTargetId] = useState('');
   const [relCardinality, setRelCardinality] = useState<'1:1' | '1:N' | 'N:M'>('1:N');
 
-  // Dragging state (Mouse & Touch)
-  const [draggingEntityId, setDraggingEntityId] = useState<string | null>(null);
-  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const canvasRef = useRef<HTMLDivElement>(null);
-
-  // Auto-save
+  // Auto-save to localStorage
   useEffect(() => {
     const dataToSave = { entities, relationships };
     localStorage.setItem(storageKey, JSON.stringify(dataToSave));
   }, [entities, relationships, storageKey]);
 
-  // Unified drag coordinate calculation with BOUNDS protection
-  const updateEntityPosition = (clientX: number, clientY: number) => {
-    if (!draggingEntityId || !canvasRef.current) return;
+  // Center / Fit View Function (Brings all entities into view)
+  const handleCenterView = () => {
+    if (entities.length === 0 || !canvasRef.current) {
+      setPan({ x: 0, y: 0 });
+      setZoom(1.0);
+      return;
+    }
 
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const currentX = clientX - canvasRect.left - dragOffsetRef.current.x;
-    const currentY = clientY - canvasRect.top - dragOffsetRef.current.y;
+    const minX = Math.min(...entities.map((e) => e.position?.x ?? 30));
+    const maxX = Math.max(...entities.map((e) => (e.position?.x ?? 30) + 230));
+    const minY = Math.min(...entities.map((e) => e.position?.y ?? 30));
+    const maxY = Math.max(...entities.map((e) => (e.position?.y ?? 30) + 200));
 
-    const maxX = Math.max(10, canvasRef.current.clientWidth - 230);
-    const maxY = Math.max(10, canvasRef.current.clientHeight - 180);
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    const canvasWidth = canvasRef.current.clientWidth;
+    const canvasHeight = canvasRef.current.clientHeight;
 
-    const boundedX = Math.max(10, Math.min(maxX, currentX));
-    const boundedY = Math.max(10, Math.min(maxY, currentY));
+    const scaleX = (canvasWidth - 60) / Math.max(contentWidth, 100);
+    const scaleY = (canvasHeight - 60) / Math.max(contentHeight, 100);
+    const newZoom = Math.min(1.2, Math.max(0.65, Math.min(scaleX, scaleY)));
 
-    setEntities((prev) =>
-      prev.map((ent) => (ent.id === draggingEntityId ? { ...ent, position: { x: boundedX, y: boundedY } } : ent))
-    );
+    const midContentX = (minX + maxX) / 2;
+    const midContentY = (minY + maxY) / 2;
+    const newPanX = canvasWidth / 2 - midContentX * newZoom;
+    const newPanY = canvasHeight / 2 - midContentY * newZoom;
+
+    setZoom(newZoom);
+    setPan({ x: newPanX, y: newPanY });
   };
 
-  // Mouse Drag Handlers
-  const handleMouseDown = (e: React.MouseEvent, entity: EntityDefinition) => {
+  // Adjust on initial load if on small screen
+  useEffect(() => {
+    if (canvasRef.current && canvasRef.current.clientWidth < 520) {
+      handleCenterView();
+    }
+  }, []);
+
+  // Canvas Pan Handlers
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.entity-card') || (e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    setIsPanningCanvas(true);
+    panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  };
+
+  const handleCanvasTouchStart = (e: React.TouchEvent) => {
+    if (
+      (e.target as HTMLElement).closest('.entity-card') ||
+      (e.target as HTMLElement).closest('button') ||
+      e.touches.length === 0
+    ) {
+      return;
+    }
+    setIsPanningCanvas(true);
+    panStartRef.current = { x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y };
+  };
+
+  // Entity Drag Handlers
+  const handleEntityMouseDown = (e: React.MouseEvent, entity: EntityDefinition) => {
+    e.stopPropagation();
     if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) {
       return;
     }
@@ -146,49 +199,64 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const currentPos = entity.position || { x: 30, y: 30 };
     dragOffsetRef.current = {
-      x: e.clientX - canvasRect.left - currentPos.x,
-      y: e.clientY - canvasRect.top - currentPos.y,
+      x: (e.clientX - canvasRect.left - pan.x) / zoom - currentPos.x,
+      y: (e.clientY - canvasRect.top - pan.y) / zoom - currentPos.y,
     };
     setDraggingEntityId(entity.id);
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingEntityId) return;
-    updateEntityPosition(e.clientX, e.clientY);
-  };
-
-  const handleMouseUp = () => {
-    setDraggingEntityId(null);
-  };
-
-  // Touch Drag Handlers (Mobile & Tablets)
-  const handleTouchStart = (e: React.TouchEvent, entity: EntityDefinition) => {
-    if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) {
+  const handleEntityTouchStart = (e: React.TouchEvent, entity: EntityDefinition) => {
+    e.stopPropagation();
+    if (
+      (e.target as HTMLElement).closest('button') ||
+      (e.target as HTMLElement).closest('input') ||
+      e.touches.length === 0
+    ) {
       return;
     }
-    if (!canvasRef.current || e.touches.length === 0) return;
+    if (!canvasRef.current) return;
 
     const touch = e.touches[0];
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const currentPos = entity.position || { x: 30, y: 30 };
     dragOffsetRef.current = {
-      x: touch.clientX - canvasRect.left - currentPos.x,
-      y: touch.clientY - canvasRect.top - currentPos.y,
+      x: (touch.clientX - canvasRect.left - pan.x) / zoom - currentPos.x,
+      y: (touch.clientY - canvasRect.top - pan.y) / zoom - currentPos.y,
     };
     setDraggingEntityId(entity.id);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!draggingEntityId || e.touches.length === 0) return;
-    e.preventDefault(); // Prevent page scrolling during entity drag
-    updateEntityPosition(e.touches[0].clientX, e.touches[0].clientY);
+  // Global Pointer / Touch Move
+  const handlePointerMove = (clientX: number, clientY: number) => {
+    if (isPanningCanvas) {
+      setPan({
+        x: clientX - panStartRef.current.x,
+        y: clientY - panStartRef.current.y,
+      });
+      return;
+    }
+
+    if (draggingEntityId && canvasRef.current) {
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const newX = (clientX - canvasRect.left - pan.x) / zoom - dragOffsetRef.current.x;
+      const newY = (clientY - canvasRect.top - pan.y) / zoom - dragOffsetRef.current.y;
+
+      setEntities((prev) =>
+        prev.map((ent) =>
+          ent.id === draggingEntityId
+            ? { ...ent, position: { x: Math.round(newX), y: Math.round(newY) } }
+            : ent
+        )
+      );
+    }
   };
 
-  const handleTouchEnd = () => {
+  const handlePointerUp = () => {
+    setIsPanningCanvas(false);
     setDraggingEntityId(null);
   };
 
-  // Add / Edit Entity Submit
+  // Entity Modal Actions
   const handleOpenAddEntity = () => {
     setEditingEntityId(null);
     setEntityFormName('');
@@ -208,7 +276,6 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
     if (!entityFormName.trim()) return;
 
     if (editingEntityId) {
-      // Edit existing entity
       setEntities((prev) =>
         prev.map((ent) =>
           ent.id === editingEntityId
@@ -217,12 +284,9 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
         )
       );
     } else {
-      // Create new entity
       const id = `ent_${Date.now()}`;
-      const maxX = canvasRef.current ? Math.max(10, canvasRef.current.clientWidth - 240) : 300;
-      const maxY = canvasRef.current ? Math.max(10, canvasRef.current.clientHeight - 200) : 250;
-      const posX = Math.min(maxX, 30 + (entities.length % 3) * 210);
-      const posY = Math.min(maxY, 40 + Math.floor(entities.length / 3) * 160);
+      const posX = 30 + (entities.length % 3) * 220;
+      const posY = 30 + Math.floor(entities.length / 3) * 180;
 
       const newEnt: EntityDefinition = {
         id,
@@ -244,7 +308,7 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
     setRelationships(relationships.filter((r) => r.sourceEntityId !== entId && r.targetEntityId !== entId));
   };
 
-  // Add / Edit Attribute Submit
+  // Attribute Modal Actions
   const handleOpenAddAttr = (entityId: string) => {
     setSelectedEntityIdForAttr(entityId);
     setEditingAttrIndex(null);
@@ -308,7 +372,7 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
     );
   };
 
-  // Add / Edit Relationship Submit
+  // Relationship Modal Actions
   const handleOpenAddRelationship = () => {
     if (entities.length < 2) return;
     setEditingRelId(null);
@@ -358,16 +422,17 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
     setRelationships(relationships.filter((r) => r.id !== relId));
   };
 
-  // Reset Model
   const handleReset = () => {
     if (!window.confirm('¿Deseas reiniciar el diagrama al estado inicial?')) return;
     localStorage.removeItem(storageKey);
     setEntities(block.initialEntities || []);
     setRelationships([]);
     setValidationResults(null);
+    setPan({ x: 0, y: 0 });
+    setZoom(1.0);
   };
 
-  // Validation Logic against expectedModel
+  // Validation Logic
   const handleValidateModel = () => {
     const expected = block.expectedModel;
     if (!expected) {
@@ -393,7 +458,6 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
           passedCount++;
           messages.push({ text: `Entidad "${expEnt.name}" presente en el modelo.`, passed: true });
 
-          // Check attributes
           if (expEnt.attributes) {
             expEnt.attributes.forEach((expAttr) => {
               totalChecks++;
@@ -487,7 +551,7 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
             </span>
             <div className="min-w-0">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#0066CC] dark:text-[#4D94FF] block truncate">
-                Lienzo de Modelado ER (Data Modeler)
+                Lienzo de Modelado ER (Pizarra Infinita)
               </span>
               <h3 className="text-base sm:text-lg font-extrabold text-[#1A1A1A] dark:text-white leading-tight truncate">
                 {block.title}
@@ -534,7 +598,7 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
             leftIcon={<Plus className="w-4 h-4" />}
             className="whitespace-nowrap"
           >
-            Añadir Entidad (Tabla)
+            Añadir Entidad
           </Button>
 
           <Button
@@ -593,246 +657,296 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
         </div>
       )}
 
-      {/* Interactive ER Canvas */}
+      {/* Infinite ER Canvas with Pan & Zoom Viewport */}
       <div
         ref={canvasRef}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        className="relative w-full h-[520px] bg-slate-50 dark:bg-[#0c0c0c] border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl overflow-hidden touch-none"
+        onMouseDown={handleCanvasMouseDown}
+        onMouseMove={(e) => handlePointerMove(e.clientX, e.clientY)}
+        onMouseUp={handlePointerUp}
+        onTouchStart={handleCanvasTouchStart}
+        onTouchMove={(e) => {
+          if (e.touches.length > 0) {
+            handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+          }
+        }}
+        onTouchEnd={handlePointerUp}
+        className={`relative w-full h-[540px] bg-slate-50 dark:bg-[#0c0c0c] border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl overflow-hidden touch-none ${
+          isPanningCanvas ? 'cursor-grabbing' : 'cursor-grab'
+        }`}
         style={{
-          backgroundImage: 'radial-gradient(circle, #88888825 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
+          backgroundImage: 'radial-gradient(circle, #88888825 1.5px, transparent 1.5px)',
+          backgroundSize: '24px 24px',
         }}
       >
-        {/* SVG Connectors with Crow's Foot Notation (Oracle Data Modeler style) */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-          {relationships.map((rel) => {
-            const source = entities.find((e) => e.id === rel.sourceEntityId);
-            const target = entities.find((e) => e.id === rel.targetEntityId);
-            if (!source || !target) return null;
+        {/* Floating Pan & Zoom Controls */}
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 p-1 bg-white/90 dark:bg-black/90 backdrop-blur-md border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl shadow-md">
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(1.6, z + 0.15))}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg transition"
+            title="Acercar (Zoom In)"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(0.5, z - 0.15))}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg transition"
+            title="Alejar (Zoom Out)"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleCenterView}
+            className="px-2 py-1 text-[11px] font-bold text-[#0066CC] dark:text-[#4D94FF] hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition flex items-center gap-1"
+            title="Centrar y encajar todas las tablas en la vista"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Centrar</span>
+          </button>
+          <span className="text-[10px] font-mono font-bold text-gray-400 px-1">
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
 
-            const sX = (source.position?.x ?? 30) + 110;
-            const sY = (source.position?.y ?? 30) + 70;
-            const tX = (target.position?.x ?? 240) + 110;
-            const tY = (target.position?.y ?? 30) + 70;
+        {/* Panning Instruction Badge */}
+        <div className="absolute top-3 left-3 z-20 pointer-events-none hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white/80 dark:bg-black/80 backdrop-blur-md rounded-lg border border-[#E0E0E0] dark:border-[#2D2D2D] text-[10px] text-gray-500 font-medium">
+          <Move className="w-3 h-3 text-[#0066CC]" />
+          <span>Arrastra el fondo para mover la pizarra</span>
+        </div>
 
-            const midX = (sX + tX) / 2;
-            const midY = (sY + tY) / 2;
+        {/* Virtual Board Layer transformed by Pan & Zoom */}
+        <div
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+          }}
+          className="absolute inset-0 w-full h-full pointer-events-auto"
+        >
+          {/* SVG Connectors with Crow's Foot Notation */}
+          <svg className="absolute inset-0 w-[5000px] h-[5000px] pointer-events-none -top-[2000px] -left-[2000px]">
+            <g transform="translate(2000, 2000)">
+              {relationships.map((rel) => {
+                const source = entities.find((e) => e.id === rel.sourceEntityId);
+                const target = entities.find((e) => e.id === rel.targetEntityId);
+                if (!source || !target) return null;
 
-            // Angle for crow's foot prongs calculation
-            const angle = Math.atan2(tY - sY, tX - sX);
-            const prongLength = 14;
+                const sX = (source.position?.x ?? 30) + 110;
+                const sY = (source.position?.y ?? 30) + 60;
+                const tX = (target.position?.x ?? 240) + 110;
+                const tY = (target.position?.y ?? 30) + 60;
+
+                const midX = (sX + tX) / 2;
+                const midY = (sY + tY) / 2;
+                const angle = Math.atan2(tY - sY, tX - sX);
+                const prongLength = 15;
+
+                return (
+                  <g key={rel.id}>
+                    {/* Main connecting line */}
+                    <line x1={sX} y1={sY} x2={tX} y2={tY} stroke="#0066CC" strokeWidth="2.5" />
+
+                    {/* Crow's Foot at target if 1:N or N:M */}
+                    {(rel.cardinality === '1:N' || rel.cardinality === 'N:M') && (
+                      <g>
+                        <line
+                          x1={tX}
+                          y1={tY}
+                          x2={tX - Math.cos(angle - 0.5) * prongLength}
+                          y2={tY - Math.sin(angle - 0.5) * prongLength}
+                          stroke="#0066CC"
+                          strokeWidth="2.5"
+                        />
+                        <line
+                          x1={tX}
+                          y1={tY}
+                          x2={tX - Math.cos(angle + 0.5) * prongLength}
+                          y2={tY - Math.sin(angle + 0.5) * prongLength}
+                          stroke="#0066CC"
+                          strokeWidth="2.5"
+                        />
+                        <line
+                          x1={tX}
+                          y1={tY}
+                          x2={tX - Math.cos(angle) * prongLength}
+                          y2={tY - Math.sin(angle) * prongLength}
+                          stroke="#0066CC"
+                          strokeWidth="2.5"
+                        />
+                      </g>
+                    )}
+
+                    {/* Crow's Foot at source if N:M */}
+                    {rel.cardinality === 'N:M' && (
+                      <g>
+                        <line
+                          x1={sX}
+                          y1={sY}
+                          x2={sX + Math.cos(angle - 0.5) * prongLength}
+                          y2={sY + Math.sin(angle - 0.5) * prongLength}
+                          stroke="#0066CC"
+                          strokeWidth="2.5"
+                        />
+                        <line
+                          x1={sX}
+                          y1={sY}
+                          x2={sX + Math.cos(angle + 0.5) * prongLength}
+                          y2={sY + Math.sin(angle + 0.5) * prongLength}
+                          stroke="#0066CC"
+                          strokeWidth="2.5"
+                        />
+                      </g>
+                    )}
+
+                    {/* Single tick marker for '1' */}
+                    {rel.cardinality === '1:N' && (
+                      <circle cx={sX} cy={sY} r="4.5" fill="#0066CC" />
+                    )}
+
+                    {/* Central Clickable Cardinality Badge */}
+                    <g
+                      className="cursor-pointer pointer-events-auto"
+                      onClick={() => handleOpenEditRelationship(rel)}
+                    >
+                      <rect
+                        x={midX - 18}
+                        y={midY - 10}
+                        width="36"
+                        height="20"
+                        rx="6"
+                        fill="#0066CC"
+                        className="hover:fill-[#0052A3] transition-colors shadow-md"
+                      />
+                      <text
+                        x={midX}
+                        y={midY + 4}
+                        fill="#ffffff"
+                        fontSize="10"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                      >
+                        {rel.cardinality}
+                      </text>
+                    </g>
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+
+          {/* Draggable Entity Cards */}
+          {entities.map((entity) => {
+            const posX = entity.position?.x ?? 30;
+            const posY = entity.position?.y ?? 30;
 
             return (
-              <g key={rel.id}>
-                {/* Main line */}
-                <line
-                  x1={sX}
-                  y1={sY}
-                  x2={tX}
-                  y2={tY}
-                  stroke="#0066CC"
-                  strokeWidth="2.5"
-                />
-
-                {/* Crow's foot notation (Patas de gallo) at target if Many (1:N or N:M) */}
-                {(rel.cardinality === '1:N' || rel.cardinality === 'N:M') && (
-                  <g>
-                    {/* 3 prongs radiating towards target entity */}
-                    <line
-                      x1={tX}
-                      y1={tY}
-                      x2={tX - Math.cos(angle - 0.5) * prongLength}
-                      y2={tY - Math.sin(angle - 0.5) * prongLength}
-                      stroke="#0066CC"
-                      strokeWidth="2.5"
-                    />
-                    <line
-                      x1={tX}
-                      y1={tY}
-                      x2={tX - Math.cos(angle + 0.5) * prongLength}
-                      y2={tY - Math.sin(angle + 0.5) * prongLength}
-                      stroke="#0066CC"
-                      strokeWidth="2.5"
-                    />
-                    <line
-                      x1={tX}
-                      y1={tY}
-                      x2={tX - Math.cos(angle) * prongLength}
-                      y2={tY - Math.sin(angle) * prongLength}
-                      stroke="#0066CC"
-                      strokeWidth="2.5"
-                    />
-                  </g>
-                )}
-
-                {/* Crow's foot at source if N:M */}
-                {rel.cardinality === 'N:M' && (
-                  <g>
-                    <line
-                      x1={sX}
-                      y1={sY}
-                      x2={sX + Math.cos(angle - 0.5) * prongLength}
-                      y2={sY + Math.sin(angle - 0.5) * prongLength}
-                      stroke="#0066CC"
-                      strokeWidth="2.5"
-                    />
-                    <line
-                      x1={sX}
-                      y1={sY}
-                      x2={sX + Math.cos(angle + 0.5) * prongLength}
-                      y2={sY + Math.sin(angle + 0.5) * prongLength}
-                      stroke="#0066CC"
-                      strokeWidth="2.5"
-                    />
-                  </g>
-                )}
-
-                {/* Perpendicular tick mark at source for '1' */}
-                {rel.cardinality === '1:N' && (
-                  <circle cx={sX} cy={sY} r="4" fill="#0066CC" />
-                )}
-
-                {/* Central Clickable Cardinality Badge */}
-                <g
-                  className="cursor-pointer pointer-events-auto"
-                  onClick={() => handleOpenEditRelationship(rel)}
+              <div
+                key={entity.id}
+                style={{ transform: `translate(${posX}px, ${posY}px)` }}
+                className="entity-card absolute w-56 bg-white dark:bg-[#181818] border-2 border-[#0066CC] dark:border-[#4D94FF] rounded-xl shadow-lg z-10 transition-shadow hover:shadow-xl"
+              >
+                {/* Entity Table Header */}
+                <div
+                  onMouseDown={(e) => handleEntityMouseDown(e, entity)}
+                  onTouchStart={(e) => handleEntityTouchStart(e, entity)}
+                  className="p-2.5 bg-[#0066CC] dark:bg-[#1a4a80] text-white rounded-t-[10px] flex items-center justify-between cursor-move touch-none"
                 >
-                  <rect
-                    x={midX - 18}
-                    y={midY - 10}
-                    width="36"
-                    height="20"
-                    rx="6"
-                    fill="#0066CC"
-                    className="hover:fill-[#0052A3] transition-colors shadow-md"
-                  />
-                  <text
-                    x={midX}
-                    y={midY + 4}
-                    fill="#ffffff"
-                    fontSize="10"
-                    fontWeight="bold"
-                    textAnchor="middle"
+                  <span className="font-bold text-xs truncate max-w-[130px] tracking-wide">
+                    {entity.name}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditEntity(entity)}
+                      className="p-1 hover:bg-white/20 rounded transition text-white"
+                      title="Editar nombre y notas de la tabla"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEntity(entity.id)}
+                      className="p-1 hover:bg-white/20 rounded transition text-white"
+                      title="Eliminar entidad"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes Banner if provided */}
+                {entity.notes && (
+                  <div className="px-2 py-1 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/40 text-[10px] text-amber-800 dark:text-amber-300 italic truncate flex items-center gap-1">
+                    <FileText className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">{entity.notes}</span>
+                  </div>
+                )}
+
+                {/* Attributes / Columns List */}
+                <div className="p-2 space-y-1 text-xs max-h-48 overflow-y-auto">
+                  {entity.attributes.map((attr, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-1 bg-gray-50 dark:bg-[#202020] rounded border border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] transition-colors"
+                    >
+                      {/* Clickable column to edit */}
+                      <div
+                        onClick={() => handleOpenEditAttr(entity.id, attr, idx)}
+                        className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
+                        title="Haz clic para editar columna"
+                      >
+                        {attr.isPk && (
+                          <span title="Clave Primaria (PK)">
+                            <Key className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          </span>
+                        )}
+                        {attr.isFk && (
+                          <span title="Clave Foránea (FK)">
+                            <LinkIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          </span>
+                        )}
+                        <span className="font-mono text-[11px] text-[#1A1A1A] dark:text-white truncate">
+                          {attr.name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">
+                          {attr.type}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAttribute(entity.id, idx)}
+                          className="text-gray-400 hover:text-rose-500 p-0.5"
+                          title="Eliminar columna"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add Column Button */}
+                <div className="p-1.5 border-t border-[#E0E0E0] dark:border-[#2D2D2D] bg-gray-50/50 dark:bg-[#141414] rounded-b-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAddAttr(entity.id)}
+                    className="w-full py-1 text-[10px] font-bold text-[#0066CC] dark:text-[#4D94FF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded flex items-center justify-center gap-1 transition"
                   >
-                    {rel.cardinality}
-                  </text>
-                </g>
-              </g>
+                    <Plus className="w-3 h-3" /> Añadir Columna
+                  </button>
+                </div>
+              </div>
             );
           })}
-        </svg>
+        </div>
 
-        {/* Entity Cards */}
-        {entities.map((entity) => {
-          const posX = entity.position?.x ?? 30;
-          const posY = entity.position?.y ?? 30;
-
-          return (
-            <div
-              key={entity.id}
-              style={{ transform: `translate(${posX}px, ${posY}px)` }}
-              className="absolute w-56 bg-white dark:bg-[#181818] border-2 border-[#0066CC] dark:border-[#4D94FF] rounded-xl shadow-lg z-10 transition-shadow hover:shadow-xl"
-            >
-              {/* Entity Table Header (Draggable via Mouse & Touch) */}
-              <div
-                onMouseDown={(e) => handleMouseDown(e, entity)}
-                onTouchStart={(e) => handleTouchStart(e, entity)}
-                className="p-2.5 bg-[#0066CC] dark:bg-[#1a4a80] text-white rounded-t-[10px] flex items-center justify-between cursor-move touch-none"
-              >
-                <span className="font-bold text-xs truncate max-w-[130px] tracking-wide">
-                  {entity.name}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditEntity(entity)}
-                    className="p-1 hover:bg-white/20 rounded transition text-white"
-                    title="Editar entidad y notas"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEntity(entity.id)}
-                    className="p-1 hover:bg-white/20 rounded transition text-white"
-                    title="Eliminar entidad"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Entity Description / Notes Banner if available */}
-              {entity.notes && (
-                <div className="px-2 py-1 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/40 text-[10px] text-amber-800 dark:text-amber-300 italic truncate flex items-center gap-1">
-                  <FileText className="w-2.5 h-2.5 shrink-0" />
-                  <span className="truncate">{entity.notes}</span>
-                </div>
-              )}
-
-              {/* Attributes / Columns List */}
-              <div className="p-2 space-y-1 text-xs max-h-44 overflow-y-auto">
-                {entity.attributes.map((attr, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-1 bg-gray-50 dark:bg-[#202020] rounded border border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] transition-colors"
-                  >
-                    {/* Clickable attribute to edit */}
-                    <div
-                      onClick={() => handleOpenEditAttr(entity.id, attr, idx)}
-                      className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
-                    >
-                      {attr.isPk && (
-                        <span title="Clave Primaria (PK)">
-                          <Key className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        </span>
-                      )}
-                      {attr.isFk && (
-                        <span title="Clave Foránea (FK)">
-                          <LinkIcon className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                        </span>
-                      )}
-                      <span className="font-mono text-[11px] text-[#1A1A1A] dark:text-white truncate">
-                        {attr.name}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1">
-                      <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">{attr.type}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAttribute(entity.id, idx)}
-                        className="text-gray-400 hover:text-rose-500 p-0.5"
-                        title="Eliminar atributo"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Column Button */}
-              <div className="p-1.5 border-t border-[#E0E0E0] dark:border-[#2D2D2D] bg-gray-50/50 dark:bg-[#141414] rounded-b-[10px]">
-                <button
-                  type="button"
-                  onClick={() => handleOpenAddAttr(entity.id)}
-                  className="w-full py-1 text-[10px] font-bold text-[#0066CC] dark:text-[#4D94FF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded flex items-center justify-center gap-1 transition"
-                >
-                  <Plus className="w-3 h-3" /> Añadir Columna
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Relationships List Badge in Corner */}
+        {/* Relationships List Floating Badge */}
         {relationships.length > 0 && (
-          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-black/90 backdrop-blur-md p-2.5 rounded-xl border border-[#E0E0E0] dark:border-[#2D2D2D] z-20 text-[11px] space-y-1 max-w-[220px]">
+          <div className="absolute bottom-3 left-3 bg-white/95 dark:bg-black/90 backdrop-blur-md p-2.5 rounded-xl border border-[#E0E0E0] dark:border-[#2D2D2D] z-20 text-[11px] space-y-1 max-w-[240px]">
             <span className="font-bold text-gray-700 dark:text-gray-300 block text-[10px] uppercase">
               Relaciones ({relationships.length}):
             </span>
@@ -841,7 +955,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                 const s = entities.find((e) => e.id === rel.sourceEntityId)?.name || 'E1';
                 const t = entities.find((e) => e.id === rel.targetEntityId)?.name || 'E2';
                 return (
-                  <div key={rel.id} className="flex items-center justify-between gap-2 text-gray-600 dark:text-gray-400">
+                  <div
+                    key={rel.id}
+                    className="flex items-center justify-between gap-2 text-gray-600 dark:text-gray-400"
+                  >
                     <span
                       onClick={() => handleOpenEditRelationship(rel)}
                       className="truncate cursor-pointer hover:text-[#0066CC] font-mono text-[10px]"
@@ -893,7 +1010,13 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
           <div className="space-y-1.5 text-xs">
             {validationResults.messages.map((msg, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className={msg.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                <span
+                  className={
+                    msg.passed
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }
+                >
                   {msg.passed ? '✓' : '✗'}
                 </span>
                 <span className="text-[#1A1A1A] dark:text-white">{msg.text}</span>

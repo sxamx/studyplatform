@@ -9,6 +9,7 @@ import {
   Edit2,
   Trash2,
   Upload,
+  Layers,
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { AdminStats, Course } from '../types';
@@ -185,7 +186,12 @@ export const AdminDashboardPage: React.FC = () => {
                 {courses.map((course) => (
                   <tr key={course.id} className="hover:bg-[#F5F5F5]/40 dark:hover:bg-[#242424]/40 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-[#1A1A1A] dark:text-white">{course.title}</div>
+                      <div
+                        onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
+                        className="font-bold text-[#1A1A1A] dark:text-white hover:text-[#0066CC] dark:hover:text-[#4D94FF] cursor-pointer transition-colors"
+                      >
+                        {course.title}
+                      </div>
                       <div className="text-xs text-[#666666] dark:text-[#808080] line-clamp-1">{course.description}</div>
                     </td>
                     <td className="px-6 py-4">
@@ -198,12 +204,21 @@ export const AdminDashboardPage: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
+                        leftIcon={<Layers className="w-3.5 h-3.5 text-[#0066CC]" />}
+                      >
+                        <span className="hidden sm:inline">Temario</span>
+                      </Button>
+                      <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => {
                           setEditingCourse(course);
                           setIsModalOpen(true);
                         }}
+                        title="Editar Ajustes del Curso"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </Button>
@@ -212,6 +227,7 @@ export const AdminDashboardPage: React.FC = () => {
                         size="sm"
                         className="text-[#DC3545] hover:text-[#C82333]"
                         onClick={() => handleDeleteCourse(course.id)}
+                        title="Eliminar Curso"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>

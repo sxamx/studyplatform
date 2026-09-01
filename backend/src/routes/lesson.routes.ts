@@ -14,6 +14,7 @@ router.get('/:id', (req, res, next) => {
 });
 
 router.post('/', authenticateToken, requireAdmin, LessonController.create);
+router.put('/:id', authenticateToken, requireAdmin, LessonController.update);
 router.delete('/:id', authenticateToken, requireAdmin, LessonController.delete);
 
 export default router;

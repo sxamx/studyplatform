@@ -12,6 +12,7 @@ import { UploadJSONPage } from './pages/UploadJSONPage';
 import { CourseWizardPage } from './pages/CourseWizardPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MarketplaceDetailPage } from './pages/MarketplaceDetailPage';
+import { CourseCurriculumPage } from './pages/CourseCurriculumPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
@@ -97,6 +98,14 @@ export const App: React.FC = () => {
             element={
               <AdminRoute>
                 <UploadJSONPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/courses/:id/curriculum"
+            element={
+              <AdminRoute>
+                <CourseCurriculumPage />
               </AdminRoute>
             }
           />

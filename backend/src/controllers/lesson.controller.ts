@@ -51,6 +51,7 @@ export class LessonController {
     res.status(200).json({
       id: lesson.id,
       courseId: lesson.course_id,
+      moduleId: lesson.module_id,
       courseTitle: lesson.course_title,
       title: lesson.title,
       description: lesson.description,
@@ -66,7 +67,7 @@ export class LessonController {
   }
 
   static async create(req: AuthRequest, res: Response) {
-    const { courseId, title, description, orderIndex, estimatedMinutes, content } = req.body;
+    const { courseId, moduleId, title, description, orderIndex, estimatedMinutes, content } = req.body;
     if (!courseId || !title) {
       return res.status(400).json({ error: 'courseId and title are required' });
     }
@@ -76,22 +77,83 @@ export class LessonController {
 
     let contentToSave = content;
     if (content) {
-      LessonJsonSchema.parse(content);
+      const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+      LessonJsonSchema.parse(parsed);
+      contentToSave = parsed;
+    } else {
+      contentToSave = {
+        version: '1.0',
+        lesson: {
+          id: lessonId,
+          title,
+          description: description || '',
+          order: orderIndex || 1,
+          estimatedMinutes: estimatedMinutes || 15,
+          blocks: [
+            { type: 'heading', id: 'h1', level: 1, content: title },
+            { type: 'text', id: 't1', content: 'Contenido de la lección...' },
+          ],
+        },
+      };
     }
 
     transaction(() => {
       db.prepare(
-        'INSERT INTO lessons (id, course_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(lessonId, courseId, title, description || '', orderIndex || 1, estimatedMinutes || 15);
+        'INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(lessonId, courseId, moduleId || null, title, description || '', orderIndex || 1, estimatedMinutes || 15);
 
-      if (contentToSave) {
-        db.prepare(
-          'INSERT INTO lesson_content (id, lesson_id, content, version) VALUES (?, ?, ?, 1)'
-        ).run(crypto.randomUUID(), lessonId, JSON.stringify(contentToSave));
+      db.prepare(
+        'INSERT INTO lesson_content (id, lesson_id, content, version) VALUES (?, ?, ?, 1)'
+      ).run(crypto.randomUUID(), lessonId, JSON.stringify(contentToSave));
+    });
+
+    res.status(201).json({ id: lessonId, title, courseId, moduleId });
+  }
+
+  static async update(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const { title, description, moduleId, orderIndex, estimatedMinutes, content } = req.body;
+    const db = getDb();
+
+    const existing = db.prepare('SELECT * FROM lessons WHERE id = ?').get(id) as any;
+    if (!existing) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
+    transaction(() => {
+      db.prepare(`
+        UPDATE lessons SET
+          title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          module_id = COALESCE(?, module_id),
+          order_index = COALESCE(?, order_index),
+          estimated_minutes = COALESCE(?, estimated_minutes),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        title ?? null,
+        description ?? null,
+        moduleId ?? null,
+        orderIndex ?? null,
+        estimatedMinutes ?? null,
+        id
+      );
+
+      if (content) {
+        const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+        LessonJsonSchema.parse(parsed);
+
+        db.prepare(`
+          INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
+          VALUES ((SELECT id FROM lesson_content WHERE lesson_id = ?), ?, ?, 1, CURRENT_TIMESTAMP)
+          ON CONFLICT(lesson_id) DO UPDATE SET
+            content = excluded.content,
+            updated_at = CURRENT_TIMESTAMP
+        `).run(id, id, JSON.stringify(parsed));
       }
     });
 
-    res.status(201).json({ id: lessonId, title, courseId });
+    res.status(200).json({ message: 'Lesson updated successfully', id });
   }
 
   static async delete(req: AuthRequest, res: Response) {
