@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { Navbar } from './components/shared/Navbar';
 import { Footer } from './components/shared/Footer';
+import { MobileBottomNav } from './components/shared/MobileBottomNav';
 import { DashboardPage } from './pages/DashboardPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 import { LessonPage } from './pages/LessonPage';
@@ -56,67 +57,68 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200">
       <Navbar />
-      <main className="flex-1">
+      <main className="flex-1 pb-20 md:pb-0">
         <ErrorBoundary>
           <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/marketplace" element={<MarketplacePage />} />
-          <Route path="/marketplace/:id" element={<MarketplaceDetailPage />} />
-          <Route
-            path="/courses/:id"
-            element={
-              <ProtectedRoute>
-                <CourseDetailPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/lessons/:id"
-            element={
-              <ProtectedRoute>
-                <LessonPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminDashboardPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/wizard"
-            element={
-              <AdminRoute>
-                <CourseWizardPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/upload-json"
-            element={
-              <AdminRoute>
-                <UploadJSONPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/admin/courses/:id/curriculum"
-            element={
-              <AdminRoute>
-                <CourseCurriculumPage />
-              </AdminRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/marketplace" element={<MarketplacePage />} />
+            <Route path="/marketplace/:id" element={<MarketplaceDetailPage />} />
+            <Route
+              path="/courses/:id"
+              element={
+                <ProtectedRoute>
+                  <CourseDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lessons/:id"
+              element={
+                <ProtectedRoute>
+                  <LessonPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute>
+                  <AdminDashboardPage />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/wizard"
+              element={
+                <AdminRoute>
+                  <CourseWizardPage />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/upload-json"
+              element={
+                <AdminRoute>
+                  <UploadJSONPage />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="/admin/courses/:id/curriculum"
+              element={
+                <AdminRoute>
+                  <CourseCurriculumPage />
+                </AdminRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </ErrorBoundary>
       </main>
       <Footer />
+      <MobileBottomNav />
     </div>
   );
 };

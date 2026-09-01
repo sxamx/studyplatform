@@ -2,12 +2,43 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎓%3C/text%3E%3C/svg%3E" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudyPlatform - Duolingo de Estudio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- Primary Title & Meta -->
+    <title>StudyPlatform - Aprendizaje Interactivo</title>
+    <meta name="description" content="Plataforma interactiva de cursos con modelado de bases de datos ER, código en vivo y evaluaciones." />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+    <link rel="alternate icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎓%3C/text%3E%3C/svg%3E" />
+    
+    <!-- PWA Web App Manifest -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    
+    <!-- Apple iOS PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="StudyPlatform" />
+    <link rel="apple-touch-icon" href="/pwa-icon.svg" />
+    
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#0066CC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)" />
   </head>
   <body class="bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200 antialiased selection:bg-[#0066CC]/20 dark:selection:bg-[#4D94FF]/20">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Register Service Worker for PWA -->
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('Service Worker registration bypassed:', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

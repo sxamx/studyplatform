@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="pwaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0066CC"/>
+      <stop offset="100%" stop-color="#004080"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  
+  <!-- Rounded App Icon Background -->
+  <rect width="512" height="512" rx="115" fill="url(#pwaGrad)"/>
+  
+  <!-- Graduation Cap Icon in White -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)" transform="translate(64, 80) scale(0.75)">
+    <path d="M256 64 L32 176 L256 288 L480 176 Z" fill="#FFFFFF" fill-opacity="0.95"/>
+    <path d="M112 216 V340 C112 370 176 416 256 416 C336 416 400 370 400 340 V216" fill="none" stroke="#FFFFFF" stroke-width="28"/>
+    <path d="M480 176 V320" stroke="#FFFFFF" stroke-width="24"/>
+    <circle cx="480" cy="336" r="16" fill="#FFFFFF"/>
+  </g>
+</svg>
