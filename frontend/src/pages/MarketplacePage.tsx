@@ -41,6 +41,26 @@ export const MarketplacePage: React.FC = () => {
   }, []);
 
   const [showEnrolled, setShowEnrolled] = useState(false);
+  const [enrollingId, setEnrollingId] = useState<string | null>(null);
+
+  const handleQuickEnroll = async (e: React.MouseEvent, course: MarketplaceCourse) => {
+    e.stopPropagation();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    setEnrollingId(course.id);
+    try {
+      const res = await apiFetch<any>(`/marketplace/courses/${course.id}/buy`, {
+        method: 'POST',
+      });
+      navigate(`/courses/${res.courseId || course.courseId}`);
+    } catch (err: any) {
+      alert(err.message || 'Error al inscribirse');
+    } finally {
+      setEnrollingId(null);
+    }
+  };
 
   const safeCourses = Array.isArray(courses) ? courses : [];
 
@@ -226,20 +246,36 @@ export const MarketplacePage: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/courses/${course.courseId}`)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/courses/${course.courseId}`);
+                    }}
                     className="border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-bold"
                   >
                     Ir al Curso
                   </Button>
                 ) : (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => navigate(`/marketplace/${course.id}`)}
-                    rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-                  >
-                    Ver Detalles
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {course.price === 0 && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        isLoading={enrollingId === course.id}
+                        onClick={(e) => handleQuickEnroll(e, course)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                      >
+                        Inscribirme Gratis
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate(`/marketplace/${course.id}`)}
+                      rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                    >
+                      Detalles
+                    </Button>
+                  </div>
                 )}
               </div>
             </Card>

@@ -43,7 +43,7 @@ export const AdminDashboardPage: React.FC = () => {
 
     const [statsResult, coursesResult, usersResult] = await Promise.allSettled([
       apiFetch<AdminStats>('/admin/stats'),
-      apiFetch<{ courses: Course[] }>('/courses'),
+      apiFetch<{ courses: Course[] }>('/courses?all=true'),
       apiFetch<{ users: any[] }>('/admin/users'),
     ]);
 

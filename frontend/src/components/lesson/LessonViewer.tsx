@@ -31,10 +31,13 @@ export const LessonViewer: React.FC<LessonViewerProps> = ({ lesson }) => {
     : 100;
 
   const handleAnswerChange = (blockId: string, value: any, _isCorrect: boolean) => {
-    setAnswers((prev) => ({
-      ...prev,
+    const updated = {
+      ...answers,
       [blockId]: value,
-    }));
+    };
+    setAnswers(updated);
+    // Background auto-save so answers persist on reload (F5) or switching to phone
+    submitProgress(lesson.id, updated, 100, false).catch(() => {});
   };
 
   const triggerConfetti = () => {
@@ -48,7 +51,7 @@ export const LessonViewer: React.FC<LessonViewerProps> = ({ lesson }) => {
   const handleCompleteLesson = async () => {
     setIsSubmitting(true);
     try {
-      await submitProgress(lesson.id, answers, 100);
+      await submitProgress(lesson.id, answers, 100, true);
       triggerConfetti();
       setShowCelebration(true);
     } catch (err) {

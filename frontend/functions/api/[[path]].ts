@@ -45,38 +45,86 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
   return keyHex === parts[2];
 }
 
-// 2. JWT Generation & Verification using HMAC-SHA256
-async function signJwt(payload: any, secret = 'studyplatform-production-secret-key-2026'): Promise<string> {
-  const enc = new TextEncoder();
+// Base64URL & UTF-8 Binary Safe Helpers
+function uint8ArrayToBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function base64UrlToUint8Array(base64Url: string): Uint8Array {
+  let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function textToBase64Url(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  return uint8ArrayToBase64Url(bytes);
+}
+
+function base64UrlToText(base64Url: string): string {
+  const bytes = base64UrlToUint8Array(base64Url);
+  return new TextDecoder().decode(bytes);
+}
+
+// 2. JWT Generation & Verification using Web Crypto HMAC-SHA256
+async function signJwt(payload: any, secret?: string): Promise<string> {
+  const effectiveSecret = secret || 'studyplatform-production-secret-key-2026';
   const header = { alg: 'HS256', typ: 'JWT' };
-  const expPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7 }; // 7 days
+  // 30 days token duration for seamless cross-device persistence
+  const expPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 };
 
-  const b64 = (obj: any) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const data = `${b64(header)}.${b64(expPayload)}`;
+  const data = `${textToBase64Url(JSON.stringify(header))}.${textToBase64Url(JSON.stringify(expPayload))}`;
 
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(effectiveSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
   const signature = await crypto.subtle.sign('HMAC', key, enc.encode(data));
-  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const sigB64 = uint8ArrayToBase64Url(new Uint8Array(signature));
   return `${data}.${sigB64}`;
 }
 
-async function verifyJwt(token: string, secret = 'studyplatform-production-secret-key-2026'): Promise<any | null> {
+async function verifyJwt(token: string, secret?: string): Promise<any | null> {
   try {
+    const effectiveSecret = secret || 'studyplatform-production-secret-key-2026';
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    const enc = new TextEncoder();
     const data = `${parts[0]}.${parts[1]}`;
-    const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
 
-    const sigStr = atob(parts[2].replace(/-/g, '+').replace(/_/g, '/'));
-    const sigBytes = new Uint8Array(sigStr.split('').map(c => c.charCodeAt(0)));
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(effectiveSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const sigBytes = base64UrlToUint8Array(parts[2]);
     const valid = await crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(data));
     if (!valid) return null;
 
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const payloadText = base64UrlToText(parts[1]);
+    const payload = JSON.parse(payloadText);
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
-  } catch {
+  } catch (err) {
+    console.error('JWT verification failed:', err);
     return null;
   }
 }
@@ -217,24 +265,56 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // COURSES: List (GET) & Create (POST)
     // -------------------------------------------------------------
     if (path === '/courses' && method === 'GET') {
-      const coursesRes = await db.prepare(`
-        SELECT c.*,
-          (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
-          (SELECT COUNT(*) FROM modules WHERE course_id = c.id) as total_modules
-        FROM courses c
-        WHERE c.is_published = 1 OR ? = 'ADMIN'
-        ORDER BY c.order_index ASC, c.created_at DESC
-      `).bind(currentUser?.role || 'USER').all();
+      const isAllRequested = url.searchParams.get('all') === 'true' || url.searchParams.get('admin') === 'true';
+
+      let coursesRes: any;
+      if (isAllRequested && currentUser?.role === 'ADMIN') {
+        // Admin views all courses (including unassigned/drafts)
+        coursesRes = await db.prepare(`
+          SELECT c.*,
+            (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
+            (SELECT COUNT(*) FROM modules WHERE course_id = c.id) as total_modules
+          FROM courses c
+          ORDER BY c.order_index ASC, c.created_at DESC
+        `).all();
+      } else if (currentUser) {
+        // Logged-in Student: "Mis Cursos" only lists courses they are enrolled in or created
+        coursesRes = await db.prepare(`
+          SELECT c.*,
+            (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
+            (SELECT COUNT(*) FROM modules WHERE course_id = c.id) as total_modules
+          FROM courses c
+          WHERE (c.is_published = 1 OR c.created_by = ? OR ? = 'ADMIN')
+            AND (
+              c.id IN (SELECT course_id FROM user_course_preferences WHERE user_id = ?)
+              OR c.id IN (SELECT DISTINCT l.course_id FROM user_progress up JOIN lessons l ON l.id = up.lesson_id WHERE up.user_id = ?)
+              OR c.created_by = ?
+            )
+          ORDER BY c.order_index ASC, c.created_at DESC
+        `).bind(currentUser.id, currentUser.role || 'USER', currentUser.id, currentUser.id, currentUser.id).all();
+      } else {
+        // Guest: List published courses
+        coursesRes = await db.prepare(`
+          SELECT c.*,
+            (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
+            (SELECT COUNT(*) FROM modules WHERE course_id = c.id) as total_modules
+          FROM courses c
+          WHERE c.is_published = 1
+          ORDER BY c.order_index ASC, c.created_at DESC
+        `).all();
+      }
 
       let progressMap = new Map<string, number>();
       let preferenceMap = new Map<string, { status: string; notes: string }>();
 
       if (currentUser) {
+        // Count completed lessons grouped by course with direct join on lessons table
         const progRes = await db.prepare(`
-          SELECT course_id, COUNT(*) as count 
-          FROM user_progress 
-          WHERE user_id = ? AND completed = 1 
-          GROUP BY course_id
+          SELECT l.course_id, COUNT(DISTINCT up.lesson_id) as count 
+          FROM user_progress up
+          JOIN lessons l ON l.id = up.lesson_id
+          WHERE up.user_id = ? AND up.completed = 1 
+          GROUP BY l.course_id
         `).bind(currentUser.id).all();
         progressMap = new Map((progRes.results || []).map((r: any) => [r.course_id, Number(r.count)]));
 
@@ -287,12 +367,34 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         .bind(id, trackId || null, title, description || '', slug, thumbnailUrl || '', currentUser.id, isPublished !== false ? 1 : 0, orderIndex || 0)
         .run();
 
+      // Automatically enroll the course creator so they can preview it in Mis Cursos
+      await db.prepare(`
+        INSERT INTO user_course_preferences (id, user_id, course_id, status)
+        VALUES (?, ?, ?, 'in_progress')
+        ON CONFLICT(user_id, course_id) DO NOTHING
+      `).bind(crypto.randomUUID(), currentUser.id, id).run();
+
       return json({ id, title, description, slug, isPublished: isPublished !== false }, 201);
     }
 
     // -------------------------------------------------------------
-    // COURSES: Get / Update / Delete By ID
+    // COURSES: Get / Update / Delete By ID & Enroll
     // -------------------------------------------------------------
+    if (path.startsWith('/courses/') && path.endsWith('/enroll') && method === 'POST') {
+      if (!currentUser) return json({ error: 'Debes iniciar sesión para inscribirte' }, 401);
+      const courseId = path.replace('/courses/', '').replace('/enroll', '');
+      const course = await db.prepare('SELECT id FROM courses WHERE id = ?').bind(courseId).first() as any;
+      if (!course) return json({ error: 'Curso no encontrado' }, 404);
+
+      await db.prepare(`
+        INSERT INTO user_course_preferences (id, user_id, course_id, status, updated_at)
+        VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, course_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+      `).bind(crypto.randomUUID(), currentUser.id, courseId).run();
+
+      return json({ message: 'Inscripción exitosa', courseId });
+    }
+
     if (path.startsWith('/courses/') && method === 'GET') {
       const courseId = path.replace('/courses/', '');
       const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
@@ -303,7 +405,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       let completedLessonIds = new Set<string>();
       if (currentUser) {
-        const upRes = await db.prepare('SELECT lesson_id FROM user_progress WHERE user_id = ? AND course_id = ? AND completed = 1').bind(currentUser.id, courseId).all();
+        const upRes = await db.prepare(`
+          SELECT DISTINCT lesson_id 
+          FROM user_progress 
+          WHERE user_id = ? 
+            AND completed = 1 
+            AND (course_id = ? OR lesson_id IN (SELECT id FROM lessons WHERE course_id = ?))
+        `).bind(currentUser.id, courseId, courseId).all();
         completedLessonIds = new Set((upRes.results || []).map((r: any) => r.lesson_id));
       }
 
@@ -956,24 +1064,31 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path === '/progress' && method === 'POST') {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
       const body = await request.json() as any;
-      const { lessonId, answers, score } = body;
+      const { lessonId, answers, score, completed } = body;
+
+      if (!lessonId) return json({ error: 'lessonId es requerido' }, 400);
 
       const lesson = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
       if (!lesson) return json({ error: 'Lección no encontrada' }, 404);
 
+      const isCompleted = completed !== false;
+      const existingProg = await db.prepare('SELECT completed, completed_at FROM user_progress WHERE user_id = ? AND lesson_id = ?').bind(currentUser.id, lessonId).first() as any;
+      const finalCompleted = isCompleted ? 1 : (existingProg ? Number(existingProg.completed) : 0);
+      const completedAt = isCompleted ? new Date().toISOString() : (existingProg?.completed_at || null);
+
       await db.prepare('DELETE FROM user_progress WHERE user_id = ? AND lesson_id = ?').bind(currentUser.id, lessonId).run();
       await db.prepare(`
-        INSERT INTO user_progress (id, user_id, lesson_id, course_id, completed, score, answers, completed_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
-      `).bind(crypto.randomUUID(), currentUser.id, lessonId, lesson.course_id, score || 100, JSON.stringify(answers || {})).run();
+        INSERT INTO user_progress (id, user_id, lesson_id, course_id, completed, score, answers, completed_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(crypto.randomUUID(), currentUser.id, lessonId, lesson.course_id, finalCompleted, score !== undefined ? score : 100, JSON.stringify(answers || {}), completedAt).run();
 
       await db.prepare(`
         INSERT INTO user_course_preferences (id, user_id, course_id, status, updated_at)
         VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, course_id) DO NOTHING
+        ON CONFLICT(user_id, course_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
       `).bind(crypto.randomUUID(), currentUser.id, lesson.course_id).run();
 
-      return json({ message: 'Progreso guardado' });
+      return json({ message: 'Progreso guardado exitosamente', lessonId, completed: Boolean(finalCompleted) });
     }
 
     if (path === '/preferences/status' && method === 'POST') {
