@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Layers,
@@ -28,6 +28,7 @@ import { AIPromptsModal } from '../components/admin/AIPromptsModal';
 export const CourseCurriculumPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +61,10 @@ export const CourseCurriculumPage: React.FC = () => {
   const [rawJsonInput, setRawJsonInput] = useState('');
   const [importError, setImportError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+
+  // Drag & Drop File Upload State
+  const [isDragging, setIsDragging] = useState(false);
+  const [loadedFilesInfo, setLoadedFilesInfo] = useState<{ name: string; type: string }[]>([]);
 
   const loadCourse = async (showLoading = true) => {
     if (!id) return;
@@ -301,32 +306,97 @@ export const CourseCurriculumPage: React.FC = () => {
     }
   };
 
-  // File drop / upload for JSON (supports single or multiple files from a folder)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Process single or multiple JSON files (from file picker or Drag & Drop)
+  const processJsonFiles = async (filesList: File[]) => {
+    setImportError('');
+    const jsonFiles = filesList.filter(
+      (f) => f.name.endsWith('.json') || f.type.includes('json') || f.type === ''
+    );
 
-    if (files.length === 1) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        setRawJsonInput(content);
-      };
-      reader.readAsText(files[0]);
+    if (jsonFiles.length === 0) {
+      setImportError('No se encontraron archivos con extensión .json en la selección.');
+      return;
+    }
+
+    const filesInfo: { name: string; type: string }[] = [];
+
+    if (jsonFiles.length === 1) {
+      try {
+        const text = await jsonFiles[0].text();
+        const parsed = JSON.parse(text);
+        setRawJsonInput(JSON.stringify(parsed, null, 2));
+        const fileKind = parsed.course || parsed.modules
+          ? 'Curso Completo'
+          : (parsed.lesson || parsed.blocks ? 'Lección' : 'JSON');
+        filesInfo.push({ name: jsonFiles[0].name, type: fileKind });
+      } catch (err: any) {
+        setImportError(`Error de sintaxis en "${jsonFiles[0].name}": ${err.message}`);
+      }
     } else {
-      // Múltiples archivos JSON seleccionados (ej. carpeta Curso_JSON)
-      const allJsons: any[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      let courseManifest: any = null;
+      const lessonFiles: { name: string; content: any }[] = [];
+      const errors: string[] = [];
+
+      for (const file of jsonFiles) {
         try {
           const text = await file.text();
           const parsed = JSON.parse(text);
-          allJsons.push(parsed);
-        } catch (err) {
-          console.warn(`Error leyendo archivo ${file.name}:`, err);
+          const lower = file.name.toLowerCase();
+
+          if (
+            lower === 'course.json' ||
+            lower === 'manifest.json' ||
+            lower === 'index.json' ||
+            parsed.course ||
+            (parsed.title && parsed.modules)
+          ) {
+            courseManifest = parsed;
+            filesInfo.push({ name: file.name, type: 'Manifiesto del Curso' });
+          } else {
+            lessonFiles.push({ name: file.name, content: parsed });
+            filesInfo.push({ name: file.name, type: 'Lección' });
+          }
+        } catch (err: any) {
+          errors.push(`Error en "${file.name}": ${err.message}`);
         }
       }
-      setRawJsonInput(JSON.stringify(allJsons, null, 2));
+
+      if (errors.length > 0) {
+        setImportError(errors.join(' | '));
+      }
+
+      const bundlePayload = courseManifest || lessonFiles.length > 0
+        ? { manifest: courseManifest, lessons: lessonFiles }
+        : null;
+
+      if (bundlePayload) {
+        setRawJsonInput(JSON.stringify(bundlePayload, null, 2));
+      }
+    }
+
+    setLoadedFilesInfo(filesInfo);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files);
+      await processJsonFiles(filesArray);
     }
   };
 
@@ -860,29 +930,68 @@ export const CourseCurriculumPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-[#1A1A1A] dark:text-white mb-1">
-              Subir Archivos (.json)
+              Arrastrar o Seleccionar Archivos JSON
             </label>
-            <input
-              type="file"
-              accept=".json"
-              multiple
-              onChange={handleFileUpload}
-              className="w-full p-2 bg-gray-50 dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#0066CC] file:text-white hover:file:bg-[#0052A3]"
-            />
-            <span className="text-[11px] text-gray-500 mt-1 block">
-              Puedes subir una sola lección, un curso completo, o seleccionar múltiples archivos .json de una carpeta.
-            </span>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-colors space-y-3 ${
+                isDragging
+                  ? 'border-[#0066CC] bg-[#0066CC]/10'
+                  : 'border-[#E0E0E0] dark:border-[#2D2D2D] bg-gray-50/60 dark:bg-[#141414]/60 hover:border-[#0066CC]'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                multiple
+                onChange={(e) => {
+                  if (e.target.files) processJsonFiles(Array.from(e.target.files));
+                }}
+                className="hidden"
+              />
+
+              <div className="w-12 h-12 rounded-full bg-[#0066CC]/10 text-[#0066CC] flex items-center justify-center mx-auto">
+                <Upload className="w-6 h-6" />
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-[#1A1A1A] dark:text-white">
+                  Arrastra aquí todos tus archivos .json o tu carpeta de curso
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  O haz clic en este recuadro para seleccionar múltiples archivos a la vez desde tu equipo
+                </p>
+              </div>
+
+              {loadedFilesInfo.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 text-left max-h-36 overflow-y-auto space-y-1">
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                    ✓ {loadedFilesInfo.length} Archivos cargados y listos:
+                  </span>
+                  {loadedFilesInfo.map((f, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-[11px] text-gray-600 dark:text-gray-300">
+                      <span className="truncate font-mono">📄 {f.name}</span>
+                      <Badge variant="primary" className="text-[9px] py-0 px-1.5">{f.type}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-[#1A1A1A] dark:text-white mb-1">
-              O Pega el Contenido JSON aquí
+              O Pega el Contenido JSON directamente aquí
             </label>
             <textarea
               value={rawJsonInput}
               onChange={(e) => setRawJsonInput(e.target.value)}
               placeholder='{ "version": "1.0", "lesson": { ... } }  o  { "course": { ... } }  o  [ { ... } ]'
-              rows={8}
+              rows={6}
               className="w-full p-3 font-mono bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC]"
               required
             />
