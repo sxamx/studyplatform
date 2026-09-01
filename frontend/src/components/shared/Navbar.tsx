@@ -20,7 +20,7 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 w-full h-16 bg-white/90 dark:bg-[#0F0F0F]/90 backdrop-blur-md border-b border-[#E0E0E0] dark:border-[#2D2D2D] transition-colors">
-      <div className="max-w-7xl h-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+      <div className="max-w-7xl h-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 relative">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-lg bg-[#0066CC] dark:bg-[#4D94FF] text-white flex items-center justify-center font-black text-xl shadow-sm group-hover:scale-105 transition-transform">
@@ -36,8 +36,8 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1">
+        {/* Navigation Links - Mathematically Centered */}
+        <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
           <Link
             to="/"
             className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${

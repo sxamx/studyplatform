@@ -11,6 +11,8 @@ import {
   StickyNote,
   ShoppingBag,
   Layers,
+  UserPlus,
+  LogIn,
 } from 'lucide-react';
 import { useCourseStore } from '../stores/courseStore';
 import { useAuthStore } from '../stores/authStore';
@@ -33,8 +35,94 @@ export const DashboardPage: React.FC = () => {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
+    if (user) {
+      fetchCourses();
+    }
+  }, [user, fetchCourses]);
+
+  // If visitor is NOT logged in, show Auth Gate (Zero content exposure without registration)
+  if (!user) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-12">
+        {/* Hero Auth Banner */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0066CC] to-[#0052A3] dark:from-[#1A2E4C] dark:to-[#0F1E33] text-white p-8 sm:p-12 shadow-xl border border-[#0066CC]/30 text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 text-xs font-bold backdrop-blur-md mx-auto">
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Plataforma de Aprendizaje Interactivo</span>
+          </div>
+
+          <div className="max-w-2xl mx-auto space-y-3">
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
+              Aprende Java y Modelado de Bases de Datos
+            </h1>
+            <p className="text-sm sm:text-base text-white/90 leading-relaxed">
+              Crea tu cuenta gratuita para acceder a los cursos, practicar en el lienzo interactivo estilo Oracle Data Modeler, resolver retos de código y registrar tus métricas de progreso.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => navigate('/register')}
+              leftIcon={<UserPlus className="w-5 h-5 text-[#0066CC]" />}
+              className="bg-white text-[#0066CC] hover:bg-gray-100 font-bold px-8 shadow-lg"
+            >
+              Crear Cuenta Gratis
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => navigate('/login')}
+              leftIcon={<LogIn className="w-5 h-5" />}
+              className="border-white text-white hover:bg-white/10 font-bold px-8"
+            >
+              Iniciar Sesión
+            </Button>
+          </div>
+        </div>
+
+        {/* Feature Highlights */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="p-6 space-y-3 border-t-4 border-t-[#0066CC]">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#0066CC] flex items-center justify-center font-bold">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-base text-[#1A1A1A] dark:text-white">
+              10 Bloques Interactivos
+            </h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Teoría explicada paso a paso con código ejecutable, cuestionarios tipo quiz y alertas de mejores prácticas.
+            </p>
+          </Card>
+
+          <Card className="p-6 space-y-3 border-t-4 border-t-emerald-500">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center font-bold">
+              <Layers className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-base text-[#1A1A1A] dark:text-white">
+              Lienzo Virtual ER
+            </h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Diseña esquemas relacionales, define Claves Primarias y Foráneas con notación de Patas de Gallo en 360°.
+            </p>
+          </Card>
+
+          <Card className="p-6 space-y-3 border-t-4 border-t-amber-500">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center font-bold">
+              <Trophy className="w-5 h-5" />
+            </div>
+            <h3 className="font-bold text-base text-[#1A1A1A] dark:text-white">
+              Métricas y Progreso
+            </h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Guarda tus respuestas, calificaciones y estadísticas de aprendizaje en tu perfil de estudiante.
+            </p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const safeCourses = Array.isArray(courses) ? courses : [];
   const totalCompletedLessons = safeCourses.reduce((acc, c) => acc + (c?.completedLessons || 0), 0);
@@ -94,7 +182,7 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            ¡Hola, {user?.fullName || user?.email.split('@')[0] || 'Estudiante'}! 👋
+            ¡Hola, {user.fullName || user.email.split('@')[0] || 'Estudiante'}! 👋
           </h1>
 
           <p className="text-sm sm:text-base text-white/85 leading-relaxed">
@@ -130,7 +218,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div>
             <span className="text-xs text-[#666666] dark:text-[#B0B0B0] font-medium">Cursos Disponibles</span>
-            <p className="text-2xl font-black text-[#1A1A1A] dark:text-white">{courses.length}</p>
+            <p className="text-2xl font-black text-[#1A1A1A] dark:text-white">{safeCourses.length}</p>
           </div>
         </Card>
 
@@ -259,34 +347,31 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="px-6 pb-5 pt-3 border-t border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between gap-2 bg-transparent">
+                <div className="p-6 pt-0 border-t border-[#E0E0E0] dark:border-[#2D2D2D] mt-4 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1">
                     <button
-                      type="button"
                       onClick={() => {
                         setEditingNotesCourse(course);
                         setCourseNotes(course.preferenceNotes || '');
                       }}
-                      className="p-2 text-gray-500 hover:text-[#0066CC] rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition"
-                      title="Agregar o editar notas de estudio"
+                      className="p-2 text-gray-400 hover:text-[#0066CC] dark:hover:text-[#4D94FF] rounded-lg hover:bg-gray-100 dark:hover:bg-[#252525] transition"
+                      title="Notas personales de estudio"
                     >
                       <StickyNote className="w-4 h-4" />
                     </button>
 
                     {course.preferenceStatus === 'archived' ? (
                       <button
-                        type="button"
                         onClick={() => handleUpdateStatus(course.id, 'in_progress')}
-                        className="p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded transition"
-                        title="Restaurar a cursos activos"
+                        className="p-2 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-gray-100 dark:hover:bg-[#252525] transition"
+                        title="Desarchivar curso"
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
                     ) : (
                       <button
-                        type="button"
                         onClick={() => handleUpdateStatus(course.id, 'archived')}
-                        className="p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded transition"
+                        className="p-2 text-gray-400 hover:text-amber-600 rounded-lg hover:bg-gray-100 dark:hover:bg-[#252525] transition"
                         title="Archivar curso"
                       >
                         <Archive className="w-4 h-4" />
@@ -330,27 +415,21 @@ export const DashboardPage: React.FC = () => {
       <Modal
         isOpen={Boolean(editingNotesCourse)}
         onClose={() => setEditingNotesCourse(null)}
-        title={`Notas de Estudio: ${editingNotesCourse?.title}`}
+        title={`Notas de Estudio: ${editingNotesCourse?.title || ''}`}
       >
         <form onSubmit={handleSaveNotes} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-[#1A1A1A] dark:text-white mb-1">
-              Notas Personales y Recordatorios
-            </label>
-            <textarea
-              value={courseNotes}
-              onChange={(e) => setCourseNotes(e.target.value)}
-              placeholder="Escribe tus metas, dudas o temas a repasar de este curso..."
-              rows={5}
-              className="w-full p-3 bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC]"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0E0] dark:border-[#2D2D2D]">
-            <Button type="button" variant="ghost" onClick={() => setEditingNotesCourse(null)}>
+          <textarea
+            value={courseNotes}
+            onChange={(e) => setCourseNotes(e.target.value)}
+            placeholder="Escribe tus notas, dudas o recordatorios sobre este curso..."
+            rows={5}
+            className="w-full p-3 bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC]"
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditingNotesCourse(null)}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" isLoading={isSavingNotes}>
+            <Button type="submit" variant="primary" size="sm" isLoading={isSavingNotes}>
               Guardar Notas
             </Button>
           </div>

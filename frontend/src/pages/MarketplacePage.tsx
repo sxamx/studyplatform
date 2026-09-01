@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { MarketplaceCourse } from '../types';
 import { apiFetch } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Badge } from '../components/shared/Badge';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [courses, setCourses] = useState<MarketplaceCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,6 +71,28 @@ export const MarketplacePage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* Auth Prompt if not logged in */}
+      {!user && (
+        <div className="p-6 bg-blue-50 dark:bg-blue-950/30 border border-[#0066CC]/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-center sm:text-left">
+            <h3 className="font-bold text-sm text-[#1A1A1A] dark:text-white">
+              ¿Quieres acceder y guardar tus avances en estos cursos?
+            </h3>
+            <p className="text-xs text-gray-500">
+              Regístrate gratis para desbloquear el contenido y registrar tus métricas de aprendizaje.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="primary" size="sm" onClick={() => navigate('/register')}>
+              Crear Cuenta Gratis
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/login')}>
+              Iniciar Sesión
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Search & Filter Controls */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-[#1A1A1A] p-4 rounded-2xl border border-[#E0E0E0] dark:border-[#2D2D2D] shadow-sm">
