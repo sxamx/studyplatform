@@ -176,7 +176,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
   // Extract User Token
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  const currentUser = token ? await verifyJwt(token, env.JWT_SECRET) : null;
+  let currentUser = token ? await verifyJwt(token, env.JWT_SECRET) : null;
 
   try {
     // -------------------------------------------------------------
