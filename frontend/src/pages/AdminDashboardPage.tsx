@@ -82,6 +82,18 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleTogglePublish = async (course: Course) => {
+    try {
+      await apiFetch(`/courses/${course.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isPublished: !course.isPublished }),
+      });
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al cambiar visibilidad del curso');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center space-y-4">
@@ -261,9 +273,16 @@ export const AdminDashboardPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={course.isPublished ? 'success' : 'secondary'}>
-                          {course.isPublished ? 'Publicado' : 'Borrador'}
-                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePublish(course)}
+                          className="inline-flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition group"
+                          title={course.isPublished ? 'Visible para estudiantes. Haz clic para ocultar.' : 'Oculto a estudiantes. Haz clic para publicar.'}
+                        >
+                          <Badge variant={course.isPublished ? 'success' : 'secondary'}>
+                            {course.isPublished ? 'Publicado (Visible)' : 'Borrador (Oculto)'}
+                          </Badge>
+                        </button>
                       </td>
                       <td className="px-6 py-4 text-xs font-semibold text-[#666666] dark:text-[#B0B0B0]">
                         {course.totalLessons}

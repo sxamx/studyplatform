@@ -9,8 +9,91 @@ interface AIPromptsModalProps {
 }
 
 export const AIPromptsModal: React.FC<AIPromptsModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'prompt1' | 'prompt2' | 'prompt3'>('prompt2');
+  const [activeTab, setActiveTab] = useState<'prompt4' | 'prompt2' | 'prompt3' | 'prompt1'>('prompt4');
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
+
+  const prompt4Content = `Eres un Arquitecto de Cursos Modulares para StudyPlatform.
+Tu misión es estructurar y generar un curso completo dividido en múltiples archivos JSON discretos organizados en una carpeta, permitiendo una fácil depuración archivo por archivo.
+
+📂 ESTRUCTURA DE LA CARPETA DEL CURSO:
+MiCurso_JSON/
+├── course.json             <- Manifiesto base del curso (metadatos, módulos y lista)
+├── leccion-01.json         <- Lección 1 completa (con sus bloques interactivos)
+├── leccion-02.json         <- Lección 2 completa
+├── leccion-03.json         <- Lección 3 completa
+└── ...
+
+----------------------------------------------------
+📄 1. CONTENIDO DE "course.json" (MANIFIESTO BASE):
+----------------------------------------------------
+{
+  "title": "Programación en Java: De Cero a Experto",
+  "description": "Domina la POO, colecciones, lambdas y persistencia relacional con ejercicios prácticos interactivos.",
+  "thumbnailUrl": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800",
+  "modules": [
+    {
+      "id": "mod-1",
+      "title": "Módulo 1: Fundamentos y Sintaxis",
+      "description": "Variables, tipos de datos, control de flujo y estructuras básicas.",
+      "estimatedHours": 4
+    },
+    {
+      "id": "mod-2",
+      "title": "Módulo 2: Programación Orientada a Objetos",
+      "description": "Clases, herencia, polimorfismo, interfaces y encapsulamiento.",
+      "estimatedHours": 6
+    }
+  ]
+}
+
+----------------------------------------------------
+📄 2. CONTENIDO DE CADA ARCHIVO DE LECCIÓN (Ej: "leccion-01.json"):
+----------------------------------------------------
+{
+  "version": "1.0",
+  "lesson": {
+    "id": "java-intro-01",
+    "moduleName": "Módulo 1: Fundamentos y Sintaxis",
+    "title": "Introducción y Primera Aplicación",
+    "description": "Escribe y ejecuta tu primer programa Java.",
+    "order": 1,
+    "estimatedMinutes": 15,
+    "blocks": [
+      {
+        "type": "heading",
+        "id": "h1",
+        "level": 1,
+        "content": "Estructura de un Programa Java"
+      },
+      {
+        "type": "text",
+        "id": "t1",
+        "content": "Todo código ejecutable en Java debe residir dentro de una clase pública con un método main..."
+      },
+      {
+        "type": "code",
+        "id": "c1",
+        "language": "java",
+        "code": "public class HolaMundo {\\n    public static void main(String[] args) {\\n        System.out.println(\\\"¡Hola desde StudyPlatform!\\\");\\n    }\\n}"
+      },
+      {
+        "type": "question_choice",
+        "id": "q1",
+        "question": "¿Cuál es el punto de entrada de cualquier aplicación Java estándar?",
+        "options": [
+          { "id": "opt1", "text": "public static void main(String[] args)", "isCorrect": true },
+          { "id": "opt2", "text": "public void run()", "isCorrect": false }
+        ],
+        "explanation": "El runtime de Java busca la firma exacta 'public static void main' para iniciar la ejecución."
+      }
+    ]
+  }
+}
+
+💡 CÓMO SUBIRLO A STUDYPLATFORM:
+1. Guarda los archivos en tu computadora.
+2. En el panel del curso, haz clic en "Importar / Subir JSON" y selecciona todos los archivos a la vez.
+3. El sistema verificará archivo por archivo y creará el curso, módulos y lecciones automáticamente.`;
 
   const prompt1Content = `Eres un Diseñador Curricular Senior y Experto en Pedagogía de la Programación.
 Tu misión es analizar el material provisto por el usuario (PDFs, guías de estudio, libros, apuntes o requerimientos) y estructurar un plan de estudios profesional modular para StudyPlatform.
@@ -191,12 +274,14 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
 
   const getActiveContent = () => {
     switch (activeTab) {
-      case 'prompt1':
-        return prompt1Content;
+      case 'prompt4':
+        return prompt4Content;
       case 'prompt2':
         return prompt2Content;
       case 'prompt3':
         return prompt3Content;
+      case 'prompt1':
+        return prompt1Content;
     }
   };
 
@@ -209,11 +294,23 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
     >
       <div className="space-y-6">
         <p className="text-xs text-[#666666] dark:text-[#B0B0B0] leading-relaxed">
-          Copia estos prompts del sistema para alimentar a modelos como Claude 3.5 Sonnet, ChatGPT o Gemini. Cada prompt instruye a la IA para generar estructuras pedagógicas, bloques de lección con URLs/PDFs protegidos o ejercicios de bases de datos compatibles con el motor de StudyPlatform.
+          Copia estos prompts del sistema para alimentar a modelos como Claude 3.5 Sonnet, ChatGPT o Gemini. Cada prompt instruye a la IA para generar estructuras pedagógicas, cursos modulares por carpetas, bloques interactivos o ejercicios compatibles con el motor de StudyPlatform.
         </p>
 
         {/* Tab Selection */}
         <div className="flex flex-wrap gap-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D] pb-3">
+          <button
+            onClick={() => setActiveTab('prompt4')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+              activeTab === 'prompt4'
+                ? 'bg-[#0066CC] text-white shadow-sm'
+                : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-amber-300" />
+            <span>1. Curso Modular por Carpetas (course.json + lecciones)</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('prompt2')}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
@@ -222,8 +319,8 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
                 : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>1. Creador de Lecciones (11 Bloques + PDFs + Videos)</span>
+            <BookOpen className="w-4 h-4" />
+            <span>2. Creador de Lecciones (11 Bloques + PDFs)</span>
           </button>
 
           <button
@@ -235,7 +332,7 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
             }`}
           >
             <Database className="w-4 h-4" />
-            <span>2. Modelado ER (Data Modeler)</span>
+            <span>3. Modelado ER (Data Modeler)</span>
           </button>
 
           <button
@@ -246,8 +343,8 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
                 : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
             }`}
           >
-            <BookOpen className="w-4 h-4" />
-            <span>3. Diseñador Modular de Cursos</span>
+            <Layers className="w-4 h-4" />
+            <span>4. Diseñador de Temario General</span>
           </button>
         </div>
 

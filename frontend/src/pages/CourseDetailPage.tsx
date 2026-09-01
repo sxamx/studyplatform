@@ -173,55 +173,79 @@ export const CourseDetailPage: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {activeCourse.lessons.map((lesson, idx) => {
-              const isCompleted = lesson.isCompleted;
-              return (
-                <div
-                  key={lesson.id}
-                  onClick={() => navigate(`/lessons/${lesson.id}`)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
-                    isCompleted
-                      ? 'bg-[#10A950]/5 dark:bg-[#2ECC71]/5 border-[#10A950]/30 hover:border-[#10A950]'
-                      : 'bg-white dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] shadow-sm'
-                  }`}
-                >
-                  <div className="flex items-center gap-4 flex-1">
+        ) : null}
+
+        {/* Lecciones Sueltas / Generales (siempre visibles si existen) */}
+        {(() => {
+          const unassigned = hasModules
+            ? lessons.filter((l) => !l.moduleId || !activeCourse.modules?.some((m) => m.id === l.moduleId))
+            : (!hasModules ? lessons : []);
+
+          if (unassigned.length === 0) return null;
+
+          return (
+            <div className="space-y-3 pt-2">
+              {hasModules && (
+                <div className="pb-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D]">
+                  <span className="text-xs font-bold text-[#0066CC] dark:text-[#4D94FF] uppercase tracking-wider">
+                    Lecciones Generales
+                  </span>
+                  <h3 className="text-lg font-bold text-[#1A1A1A] dark:text-white">
+                    Temas Adicionales ({unassigned.length})
+                  </h3>
+                </div>
+              )}
+
+              <div className="space-y-2.5">
+                {unassigned.map((lesson, idx) => {
+                  const isCompleted = lesson.isCompleted;
+                  return (
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      key={lesson.id}
+                      onClick={() => navigate(`/lessons/${lesson.id}`)}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
                         isCompleted
-                          ? 'bg-[#10A950] text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          ? 'bg-[#10A950]/5 dark:bg-[#2ECC71]/5 border-[#10A950]/30 hover:border-[#10A950]'
+                          : 'bg-white dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] shadow-sm'
                       }`}
                     >
-                      {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
-                    </div>
+                      <div className="flex items-center gap-4 flex-1">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                            isCompleted
+                              ? 'bg-[#10A950] text-white'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
+                        </div>
 
-                    <div>
-                      <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-white">
-                        {lesson.title}
-                      </h4>
-                      <p className="text-xs text-[#666666] dark:text-[#B0B0B0] mt-0.5">
-                        {lesson.description || 'Lección interactiva estructurada'}
-                      </p>
-                    </div>
-                  </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-white">
+                            {lesson.title}
+                          </h4>
+                          <p className="text-xs text-[#666666] dark:text-[#B0B0B0] mt-0.5">
+                            {lesson.description || 'Lección interactiva estructurada'}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {lesson.estimatedMinutes} min
-                    </span>
-                    <Button variant={isCompleted ? 'secondary' : 'primary'} size="sm">
-                      {isCompleted ? 'Repasar' : 'Iniciar'}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {lesson.estimatedMinutes} min
+                        </span>
+                        <Button variant={isCompleted ? 'secondary' : 'primary'} size="sm">
+                          {isCompleted ? 'Repasar' : 'Iniciar'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import {
   Upload,
   ArrowLeft,
   Eye,
+  EyeOff,
   Check,
   FileCode,
   Clock,
@@ -229,12 +230,39 @@ export const CourseCurriculumPage: React.FC = () => {
     }
   };
 
+  // Toggle Course Visibility (Publish / Unpublish)
+  const handleTogglePublish = async () => {
+    if (!course) return;
+    try {
+      await apiFetch(`/courses/${course.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isPublished: !course.isPublished }),
+      });
+      loadCourse(false);
+    } catch (err: any) {
+      alert(err.message || 'Error al cambiar visibilidad');
+    }
+  };
+
+  // Move / Assign Lesson to Module
+  const handleAssignLessonToModule = async (lessonId: string, targetModId: string | null) => {
+    try {
+      await apiFetch(`/lessons/${lessonId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ moduleId: targetModId }),
+      });
+      loadCourse(false);
+    } catch (err: any) {
+      alert(err.message || 'Error al asignar lección al módulo');
+    }
+  };
+
   // Delete Lesson
   const handleDeleteLesson = async (lessonId: string) => {
     if (!window.confirm('¿Estás seguro de eliminar esta lección permanentemente?')) return;
     try {
       await apiFetch(`/lessons/${lessonId}`, { method: 'DELETE' });
-      loadCourse();
+      loadCourse(false);
     } catch (err: any) {
       alert(err.message || 'Error al eliminar');
     }
@@ -357,11 +385,18 @@ export const CourseCurriculumPage: React.FC = () => {
       <Card className="p-6 sm:p-8 bg-gradient-to-br from-white to-[#F5F5F5] dark:from-[#1A1A1A] dark:to-[#141414]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="primary">Editor de Estructura</Badge>
-              <Badge variant={course.isPublished ? 'success' : 'secondary'}>
-                {course.isPublished ? 'Publicado' : 'Borrador'}
-              </Badge>
+              <button
+                type="button"
+                onClick={handleTogglePublish}
+                className="cursor-pointer hover:opacity-80 transition"
+                title={course.isPublished ? 'Curso visible a estudiantes. Haz clic para ocultar.' : 'Curso oculto a estudiantes. Haz clic para publicar.'}
+              >
+                <Badge variant={course.isPublished ? 'success' : 'secondary'}>
+                  {course.isPublished ? 'Publicado (Visible)' : 'Borrador (Oculto)'}
+                </Badge>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1A1A1A] dark:text-white tracking-tight">
               {course.title}
@@ -372,6 +407,14 @@ export const CourseCurriculumPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant={course.isPublished ? "outline" : "primary"}
+              size="sm"
+              onClick={handleTogglePublish}
+              leftIcon={course.isPublished ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            >
+              {course.isPublished ? 'Ocultar a Estudiantes' : 'Publicar Curso'}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -545,31 +588,133 @@ export const CourseCurriculumPage: React.FC = () => {
               </Card>
             ))}
           </div>
-        ) : (
-          <div className="p-8 border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl text-center space-y-3">
-            <Layers className="w-8 h-8 text-gray-400 mx-auto" />
-            <h3 className="font-bold text-sm text-[#1A1A1A] dark:text-white">
-              No hay módulos definidos en este curso
-            </h3>
-            <p className="text-xs text-[#666666] dark:text-[#B0B0B0] max-w-md mx-auto">
-              Puedes crear módulos para organizar el temario o importar lecciones directamente en JSON.
-            </p>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setEditingModule(null);
-                setModuleTitle('');
-                setModuleDescription('');
-                setModuleHours(4);
-                setIsModuleModalOpen(true);
-              }}
-              leftIcon={<Plus className="w-4 h-4" />}
-            >
-              Crear Primer Módulo
-            </Button>
-          </div>
-        )}
+        ) : null}
+
+        {/* Lecciones Sueltas / Sin Módulo Asignado (siempre visibles) */}
+        {(() => {
+          const unassigned = hasModules
+            ? (course.lessons || []).filter((l) => !l.moduleId || !course.modules?.some((m) => m.id === l.moduleId))
+            : (!hasModules ? (course.lessons || []) : []);
+
+          if (unassigned.length === 0 && hasModules) return null;
+
+          if (!hasModules && unassigned.length === 0) {
+            return (
+              <div className="p-8 border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl text-center space-y-3">
+                <Layers className="w-8 h-8 text-gray-400 mx-auto" />
+                <h3 className="font-bold text-sm text-[#1A1A1A] dark:text-white">
+                  No hay módulos ni lecciones definidos en este curso
+                </h3>
+                <p className="text-xs text-[#666666] dark:text-[#B0B0B0] max-w-md mx-auto">
+                  Puedes crear módulos para organizar el temario o importar lecciones directamente en JSON.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setEditingModule(null);
+                    setModuleTitle('');
+                    setModuleDescription('');
+                    setModuleHours(4);
+                    setIsModuleModalOpen(true);
+                  }}
+                  leftIcon={<Plus className="w-4 h-4" />}
+                >
+                  Crear Primer Módulo
+                </Button>
+              </div>
+            );
+          }
+
+          return (
+            <Card className="p-5 sm:p-6 border-amber-500/40 bg-amber-50/10 dark:bg-amber-950/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/20">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                    {hasModules ? '⚠️ Lecciones Sin Módulo Asignado' : 'Lecciones del Curso'}
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-[#1A1A1A] dark:text-white">
+                    {hasModules ? `Lecciones Sueltas (${unassigned.length})` : `Todas las Lecciones (${unassigned.length})`}
+                  </h3>
+                  {hasModules && (
+                    <p className="text-xs text-[#666666] dark:text-[#B0B0B0]">
+                      Estas lecciones fueron importadas sin asignar módulo. Puedes editarlas o moverlas a cualquier módulo del curso.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {unassigned.map((lesson, uIdx) => (
+                  <div
+                    key={lesson.id}
+                    className="p-3.5 bg-white dark:bg-[#181818] border border-amber-500/30 dark:border-amber-900/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-amber-500 transition-colors shadow-xs"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
+                        {uIdx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-[#1A1A1A] dark:text-white truncate">
+                          {lesson.title}
+                        </h4>
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {lesson.estimatedMinutes} min
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {course.modules && course.modules.length > 0 && (
+                        <select
+                          onChange={(e) => handleAssignLessonToModule(lesson.id, e.target.value)}
+                          defaultValue=""
+                          className="text-xs py-1.5 px-2 bg-gray-50 dark:bg-[#202020] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-lg text-gray-700 dark:text-gray-200 focus:outline-none"
+                        >
+                          <option value="" disabled>Mover a Módulo...</option>
+                          {course.modules.map((m, mIdx) => (
+                            <option key={m.id} value={m.id}>
+                              Módulo {mIdx + 1}: {m.title}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleCopyLessonJson(lesson.id)}
+                        title="Copiar JSON"
+                        leftIcon={copiedId === lesson.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      >
+                        <span className="hidden sm:inline">{copiedId === lesson.id ? 'Copiado' : 'Copiar JSON'}</span>
+                      </Button>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleOpenVisualEditor(lesson)}
+                        leftIcon={<FileCode className="w-3.5 h-3.5" />}
+                      >
+                        <span>Editor</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-rose-500 hover:text-rose-600"
+                        onClick={() => handleDeleteLesson(lesson.id)}
+                        title="Eliminar Lección"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          );
+        })()}
       </div>
 
       {/* Modal: Fullscreen Visual Lesson Editor */}

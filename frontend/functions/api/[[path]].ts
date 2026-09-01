@@ -595,6 +595,100 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         }
       }
 
+      // Caso 0: Paquete Modular con Manifest y Archivos de Lección { manifest, lessons: [{ name, content }] }
+      if (jsonData.manifest || (jsonData.lessons && Array.isArray(jsonData.lessons))) {
+        const manifest = jsonData.manifest || {};
+        const lessonsList = Array.isArray(jsonData.lessons) ? jsonData.lessons : [];
+
+        // 1. Si el manifest define título y descripción de un nuevo curso, se crea o actualiza
+        if (manifest.title || manifest.description) {
+          await db.prepare('UPDATE courses SET title = COALESCE(?, title), description = COALESCE(?, description), thumbnail_url = COALESCE(?, thumbnail_url) WHERE id = ?')
+            .bind(manifest.title || null, manifest.description || null, manifest.thumbnailUrl || manifest.thumbnail || null, targetCourseId)
+            .run();
+        }
+
+        // 2. Módulos definidos en el manifest
+        const moduleMap = new Map<string, string>(); // 'modulo 1' o ID -> DB module_id
+        if (Array.isArray(manifest.modules)) {
+          for (let mIdx = 0; mIdx < manifest.modules.length; mIdx++) {
+            const m = manifest.modules[mIdx];
+            const mId = m.id || crypto.randomUUID();
+            const mTitle = m.title || `Módulo ${mIdx + 1}`;
+            await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours) VALUES (?, ?, ?, ?, ?, ?)')
+              .bind(mId, targetCourseId, mTitle, m.description || '', m.order || (mIdx + 1), m.estimatedHours || 4)
+              .run();
+            moduleMap.set(mTitle.toLowerCase().trim(), mId);
+            if (m.id) moduleMap.set(String(m.id).toLowerCase().trim(), mId);
+            if (m.key) moduleMap.set(String(m.key).toLowerCase().trim(), mId);
+          }
+        }
+
+        // 3. Procesar e importar cada archivo de lección con diagnóstico individual
+        let importedCount = 0;
+        const fileErrors: string[] = [];
+
+        for (let lIdx = 0; lIdx < lessonsList.length; lIdx++) {
+          const item = lessonsList[lIdx];
+          const fileName = item.name || `leccion-${lIdx + 1}.json`;
+          const content = item.content || item;
+          const lessonData = content.lesson || content;
+
+          if (!lessonData || (!lessonData.blocks && !lessonData.title)) {
+            fileErrors.push(`Archivo "${fileName}": no contiene estructura válida de lección.`);
+            continue;
+          }
+
+          const lessonId = lessonData.id || crypto.randomUUID();
+          const title = lessonData.title || `Lección ${lIdx + 1}`;
+          const estMin = Number(lessonData.estimatedMinutes || 15);
+          const order = Number(lessonData.order || (lIdx + 1));
+          
+          let assignedModId = moduleId || null;
+          if (lessonData.moduleName && moduleMap.has(String(lessonData.moduleName).toLowerCase().trim())) {
+            assignedModId = moduleMap.get(String(lessonData.moduleName).toLowerCase().trim())!;
+          } else if (lessonData.moduleId && moduleMap.has(String(lessonData.moduleId).toLowerCase().trim())) {
+            assignedModId = moduleMap.get(String(lessonData.moduleId).toLowerCase().trim())!;
+          } else if (!assignedModId && moduleMap.size > 0) {
+            assignedModId = Array.from(moduleMap.values())[0];
+          }
+
+          const fullLessonJson = {
+            version: '1.0',
+            lesson: {
+              id: lessonId,
+              title,
+              description: lessonData.description || '',
+              order,
+              estimatedMinutes: estMin,
+              blocks: Array.isArray(lessonData.blocks) ? lessonData.blocks : [{ type: 'heading', id: 'h1', level: 1, content: title }],
+            },
+          };
+
+          await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(lessonId, targetCourseId, assignedModId, title, lessonData.description || '', order, estMin)
+            .run();
+
+          await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
+          await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+            .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+            .run();
+
+          importedCount++;
+        }
+
+        if (fileErrors.length > 0) {
+          return json({
+            message: `Importadas ${importedCount} lecciones con observaciones en archivos: ${fileErrors.join(', ')}`,
+            courseId: targetCourseId,
+          }, 201);
+        }
+
+        return json({
+          message: `¡Paquete de curso importado con éxito! Se cargaron ${importedCount} archivos de lecciones.`,
+          courseId: targetCourseId,
+        }, 201);
+      }
+
       // Caso 1: Estructura de Curso Completo con Módulos { course: { title, modules: [...] } } o { title, modules: [...] }
       const courseObj = jsonData.course || (jsonData.modules ? jsonData : null);
       if (courseObj && Array.isArray(courseObj.modules)) {
