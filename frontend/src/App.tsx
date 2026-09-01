@@ -55,7 +55,7 @@ export const App: React.FC = () => {
   }, [checkAuth]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200 overflow-x-hidden w-full max-w-[100vw]">
       <Navbar />
       <main className="flex-1 pb-20 md:pb-0">
         <ErrorBoundary>

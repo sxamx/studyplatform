@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Save,
   Eye,
@@ -37,16 +37,33 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const saveTimeoutRef = useRef<any>(null);
+  const pendingLessonRef = useRef<LessonJSON>(initialLessonJson);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   // Sync JSON text when lessonData changes from visual editor
-  const updateLessonState = (newLesson: LessonJSON, triggerAutoSave = true) => {
+  const updateLessonState = (newLesson: LessonJSON, immediate = false) => {
     setLessonData(newLesson);
     setRawJsonText(JSON.stringify(newLesson, null, 2));
     setJsonError(null);
+    pendingLessonRef.current = newLesson;
 
-    if (triggerAutoSave) {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    if (immediate) {
       setSaveStatus('saving');
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      onSave(newLesson)
+        .then(() => {
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2500);
+        })
+        .catch(() => setSaveStatus('idle'));
+    } else {
+      setSaveStatus('saving');
       saveTimeoutRef.current = setTimeout(async () => {
         try {
           await onSave(newLesson);
@@ -55,7 +72,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
         } catch {
           setSaveStatus('idle');
         }
-      }, 3000);
+      }, 400);
     }
   };
 
@@ -84,7 +101,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
     updateLessonState({
       ...lessonData,
       lesson: { ...lessonData.lesson, blocks },
-    });
+    }, true);
   };
 
   const handleMoveDown = (index: number) => {
@@ -97,7 +114,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
     updateLessonState({
       ...lessonData,
       lesson: { ...lessonData.lesson, blocks },
-    });
+    }, true);
   };
 
   const handleDeleteBlock = (index: number) => {
@@ -106,7 +123,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
     updateLessonState({
       ...lessonData,
       lesson: { ...lessonData.lesson, blocks },
-    });
+    }, true);
   };
 
   const handleEditBlock = (block: Block, index: number) => {
@@ -122,7 +139,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
     updateLessonState({
       ...lessonData,
       lesson: { ...lessonData.lesson, blocks },
-    });
+    }, true);
   };
 
   const handleAddBlock = (type: BlockType) => {
@@ -227,7 +244,7 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
     updateLessonState({
       ...lessonData,
       lesson: { ...lessonData.lesson, blocks },
-    });
+    }, true);
   };
 
   const handleManualSave = async () => {

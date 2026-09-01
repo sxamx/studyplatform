@@ -568,14 +568,26 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     // -------------------------------------------------------------
-    // MARKETPLACE: Courses
+    // MARKETPLACE: Courses (Auto-synced with all published courses)
     // -------------------------------------------------------------
     if (path === '/marketplace/courses' && method === 'GET') {
       const itemsRes = await db.prepare(`
-        SELECT mc.*, (SELECT COUNT(*) FROM lessons WHERE course_id = mc.course_id) as total_lessons
-        FROM marketplace_courses mc
-        WHERE mc.is_active = 1
-        ORDER BY mc.published_at DESC
+        SELECT 
+          COALESCE(mc.id, c.id) as id,
+          c.id as course_id,
+          c.title,
+          c.description,
+          c.thumbnail_url,
+          COALESCE(mc.price, 0) as price,
+          COALESCE(mc.currency, 'USD') as currency,
+          COALESCE(mc.purchase_count, 0) as purchase_count,
+          COALESCE(mc.average_rating, 5.0) as average_rating,
+          (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
+          COALESCE(mc.published_at, c.created_at) as published_at
+        FROM courses c
+        LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
+        WHERE c.is_published = 1
+        ORDER BY c.order_index ASC, c.created_at DESC
       `).all();
 
       const courses = (itemsRes.results || []).map((l: any) => ({

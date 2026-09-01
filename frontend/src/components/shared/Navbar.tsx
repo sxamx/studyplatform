@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag } from 'lucide-react';
+import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, LogIn } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
@@ -19,11 +19,11 @@ export const Navbar: React.FC = () => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <header className="sticky top-0 z-40 w-full h-16 bg-white/90 dark:bg-[#0F0F0F]/90 backdrop-blur-md border-b border-[#E0E0E0] dark:border-[#2D2D2D] transition-colors">
-      <div className="max-w-7xl h-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 relative">
+    <header className="sticky top-0 z-40 w-full pt-[env(safe-area-inset-top,0px)] bg-white/90 dark:bg-[#0F0F0F]/90 backdrop-blur-md border-b border-[#E0E0E0] dark:border-[#2D2D2D] transition-colors">
+      <div className="max-w-7xl h-16 mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 relative">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-lg bg-[#0066CC] dark:bg-[#4D94FF] text-white flex items-center justify-center font-black text-xl shadow-sm group-hover:scale-105 transition-transform">
+        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#0066CC] dark:bg-[#4D94FF] text-white flex items-center justify-center font-black text-xl shadow-sm group-hover:scale-105 transition-transform">
             <GraduationCap className="w-5 h-5" />
           </div>
           <div className="flex flex-col">
@@ -36,7 +36,7 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        {/* Navigation Links - Mathematically Centered */}
+        {/* Navigation Links - Mathematically Centered on Desktop */}
         <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
           <Link
             to="/"
@@ -78,9 +78,9 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Social Links */}
-          <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Social Links (Visible on desktop/tablet to prevent mobile overflow) */}
+          <div className="hidden sm:flex items-center gap-1">
             <a
               href="https://github.com/sxamx"
               target="_blank"
@@ -104,8 +104,8 @@ export const Navbar: React.FC = () => {
           <ThemeToggle />
 
           {user ? (
-            <div className="flex items-center gap-3 pl-2 border-l border-[#E0E0E0] dark:border-[#2D2D2D]">
-              <div className="hidden sm:flex flex-col items-end text-right">
+            <div className="flex items-center gap-2 sm:gap-3 pl-1 sm:pl-2 border-l border-[#E0E0E0] dark:border-[#2D2D2D]">
+              <div className="hidden md:flex flex-col items-end text-right">
                 <span className="text-xs font-semibold text-[#1A1A1A] dark:text-white leading-tight">
                   {user.fullName || (user.email ? user.email.split('@')[0] : 'Estudiante')}
                 </span>
@@ -113,25 +113,35 @@ export const Navbar: React.FC = () => {
                   {user.role}
                 </span>
               </div>
-              <div className="w-9 h-9 rounded-full bg-[#F5F5F5] dark:bg-[#242424] border border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-center text-sm font-bold text-[#1A1A1A] dark:text-white">
-                <User className="w-4 h-4" />
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#0066CC]/10 text-[#0066CC] dark:bg-[#4D94FF]/20 dark:text-[#4D94FF] border border-[#0066CC]/30 flex items-center justify-center text-xs font-bold">
+                {user.fullName ? user.fullName[0].toUpperCase() : <User className="w-4 h-4" />}
               </div>
               <button
                 onClick={handleLogout}
                 title="Cerrar Sesión"
-                className="p-2 text-[#666666] hover:text-[#DC3545] dark:text-[#B0B0B0] dark:hover:text-[#FF6B6B] rounded-lg transition-colors"
+                className="p-1.5 sm:p-2 text-[#666666] hover:text-[#DC3545] dark:text-[#B0B0B0] dark:hover:text-[#FF6B6B] rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
-                Iniciar Sesión
-              </Button>
-              <Button variant="primary" size="sm" onClick={() => navigate('/register')}>
-                Registrarse
-              </Button>
+            <div className="flex items-center gap-1.5">
+              {/* Mobile single compact button to prevent horizontal overflow */}
+              <div className="sm:hidden">
+                <Button variant="primary" size="sm" onClick={() => navigate('/login')} leftIcon={<LogIn className="w-3.5 h-3.5" />}>
+                  Entrar
+                </Button>
+              </div>
+
+              {/* Desktop full buttons */}
+              <div className="hidden sm:flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+                  Iniciar Sesión
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => navigate('/register')}>
+                  Registrarse
+                </Button>
+              </div>
             </div>
           )}
         </div>

@@ -10,6 +10,17 @@ export const VideoBlock: React.FC<VideoBlockProps> = ({ block }) => {
   const rawUrl = block.url?.trim() || '';
   const lowerUrl = rawUrl.toLowerCase();
 
+  // Placeholder if URL is empty
+  if (!rawUrl) {
+    return (
+      <div className="my-5 p-6 rounded-2xl border border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] bg-[#F5F5F5] dark:bg-[#1A1A1A] text-center">
+        <Video className="w-8 h-8 text-[#0066CC] dark:text-[#4D94FF] mx-auto mb-2 opacity-60" />
+        <h4 className="text-sm font-bold text-[#1A1A1A] dark:text-white">{block.title || 'Video de la Lección'}</h4>
+        <p className="text-xs text-gray-400 mt-1">Configura la URL de YouTube, Vimeo o MP4 en el editor para reproducir el video.</p>
+      </div>
+    );
+  }
+
   // Security check: only allow safe http/https URLs
   if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://')) {
     return (

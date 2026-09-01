@@ -347,8 +347,8 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-6 pt-0 border-t border-[#E0E0E0] dark:border-[#2D2D2D] mt-4 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1">
+                <div className="px-6 py-4 border-t border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between gap-2 bg-gray-50/40 dark:bg-[#141414]/40 rounded-b-2xl">
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => {
                         setEditingNotesCourse(course);
