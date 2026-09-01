@@ -60,21 +60,21 @@ export const CourseCurriculumPage: React.FC = () => {
   const [importError, setImportError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
 
-  const loadCourse = async () => {
+  const loadCourse = async (showLoading = true) => {
     if (!id) return;
-    setIsLoading(true);
+    if (showLoading) setIsLoading(true);
     try {
       const data = await apiFetch<CourseDetail>(`/courses/${id}`);
       setCourse(data);
     } catch (err) {
       console.error('Error loading course curriculum:', err);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCourse();
+    loadCourse(true);
   }, [id]);
 
   // Copy Lesson JSON to Clipboard for AI Prompting
@@ -140,7 +140,7 @@ export const CourseCurriculumPage: React.FC = () => {
     }
   };
 
-  // Save Lesson from Visual Editor
+  // Save Lesson from Visual Editor (Seamless, No Reload / No Flicker)
   const handleSaveLessonJson = async (updatedJson: LessonJSON) => {
     if (!activeLessonId) return;
     try {
@@ -153,9 +153,10 @@ export const CourseCurriculumPage: React.FC = () => {
           content: updatedJson,
         }),
       });
-      await loadCourse();
+      // Silent refresh of course list in background without reloading the page or closing the editor
+      await loadCourse(false);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar la lección');
+      console.error('Error saving lesson in background:', err);
     }
   };
 
@@ -272,17 +273,33 @@ export const CourseCurriculumPage: React.FC = () => {
     }
   };
 
-  // File drop / upload for JSON
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // File drop / upload for JSON (supports single or multiple files from a folder)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setRawJsonInput(content);
-    };
-    reader.readAsText(file);
+    if (files.length === 1) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setRawJsonInput(content);
+      };
+      reader.readAsText(files[0]);
+    } else {
+      // Múltiples archivos JSON seleccionados (ej. carpeta Curso_JSON)
+      const allJsons: any[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          allJsons.push(parsed);
+        } catch (err) {
+          console.warn(`Error leyendo archivo ${file.name}:`, err);
+        }
+      }
+      setRawJsonInput(JSON.stringify(allJsons, null, 2));
+    }
   };
 
   if (isLoading || !course) {
@@ -698,14 +715,18 @@ export const CourseCurriculumPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-[#1A1A1A] dark:text-white mb-1">
-              Subir Archivo (.json)
+              Subir Archivos (.json)
             </label>
             <input
               type="file"
               accept=".json"
+              multiple
               onChange={handleFileUpload}
               className="w-full p-2 bg-gray-50 dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#0066CC] file:text-white hover:file:bg-[#0052A3]"
             />
+            <span className="text-[11px] text-gray-500 mt-1 block">
+              Puedes subir una sola lección, un curso completo, o seleccionar múltiples archivos .json de una carpeta.
+            </span>
           </div>
 
           <div>
@@ -715,7 +736,7 @@ export const CourseCurriculumPage: React.FC = () => {
             <textarea
               value={rawJsonInput}
               onChange={(e) => setRawJsonInput(e.target.value)}
-              placeholder='{ "version": "1.0", "lesson": { ... } }'
+              placeholder='{ "version": "1.0", "lesson": { ... } }  o  { "course": { ... } }  o  [ { ... } ]'
               rows={8}
               className="w-full p-3 font-mono bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl text-xs text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC]"
               required
@@ -723,7 +744,7 @@ export const CourseCurriculumPage: React.FC = () => {
           </div>
 
           {importError && (
-            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-600 dark:text-rose-400">
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-600 dark:text-rose-400 font-medium">
               {importError}
             </div>
           )}
@@ -733,7 +754,7 @@ export const CourseCurriculumPage: React.FC = () => {
               Cancelar
             </Button>
             <Button type="submit" variant="primary" isLoading={isImporting}>
-              Validar y Guardar Lección
+              Validar e Importar
             </Button>
           </div>
         </form>

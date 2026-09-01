@@ -579,14 +579,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       let jsonData: any = jsonContent;
       if (typeof jsonContent === 'string') {
-        try { jsonData = JSON.parse(jsonContent); } catch { return json({ error: 'JSON inválido' }, 400); }
+        try { jsonData = JSON.parse(jsonContent); } catch { return json({ error: 'JSON inválido. Verifica la sintaxis del archivo.' }, 400); }
       }
-
-      if (!jsonData?.lesson) return json({ error: 'El JSON debe contener un objeto "lesson"' }, 400);
-
-      const lessonData = jsonData.lesson;
-      const lessonId = lessonData.id || crypto.randomUUID();
-      const title = lessonData.title || 'Lección Importada';
 
       let targetCourseId = courseId;
       if (!targetCourseId) {
@@ -601,15 +595,121 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         }
       }
 
+      // Caso 1: Estructura de Curso Completo con Módulos { course: { title, modules: [...] } } o { title, modules: [...] }
+      const courseObj = jsonData.course || (jsonData.modules ? jsonData : null);
+      if (courseObj && Array.isArray(courseObj.modules)) {
+        let createdModulesCount = 0;
+        let createdLessonsCount = 0;
+
+        for (let mIdx = 0; mIdx < courseObj.modules.length; mIdx++) {
+          const mod = courseObj.modules[mIdx];
+          const newModId = mod.id || crypto.randomUUID();
+          await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index) VALUES (?, ?, ?, ?, ?)')
+            .bind(newModId, targetCourseId, mod.title || `Módulo ${mIdx + 1}`, mod.description || '', mod.order || (mIdx + 1))
+            .run();
+          createdModulesCount++;
+
+          if (Array.isArray(mod.lessons)) {
+            for (let lIdx = 0; lIdx < mod.lessons.length; lIdx++) {
+              const l = mod.lessons[lIdx];
+              const newLessonId = l.id || crypto.randomUUID();
+              const lTitle = l.title || `Lección ${lIdx + 1}`;
+              const lDesc = l.description || '';
+              const lEst = Number(l.estimatedMinutes || 15);
+              const lOrder = Number(l.order || (lIdx + 1));
+
+              const fullLessonJson = {
+                version: '1.0',
+                lesson: {
+                  id: newLessonId,
+                  title: lTitle,
+                  description: lDesc,
+                  order: lOrder,
+                  estimatedMinutes: lEst,
+                  blocks: Array.isArray(l.blocks) ? l.blocks : (l.content?.lesson?.blocks || [{ type: 'heading', id: 'h1', level: 1, content: lTitle }]),
+                },
+              };
+
+              await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .bind(newLessonId, targetCourseId, newModId, lTitle, lDesc, lOrder, lEst)
+                .run();
+
+              await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(newLessonId).run();
+              await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+                .bind(crypto.randomUUID(), newLessonId, JSON.stringify(fullLessonJson))
+                .run();
+
+              createdLessonsCount++;
+            }
+          }
+        }
+
+        return json({
+          message: `Curso importado con éxito: ${createdModulesCount} módulos y ${createdLessonsCount} lecciones creadas.`,
+          courseId: targetCourseId,
+        }, 201);
+      }
+
+      // Caso 2: Array de lecciones [ { ... }, { ... } ]
+      if (Array.isArray(jsonData)) {
+        let count = 0;
+        for (let idx = 0; idx < jsonData.length; idx++) {
+          const item = jsonData[idx];
+          const lessonData = item.lesson || item;
+          const lessonId = lessonData.id || crypto.randomUUID();
+          const title = lessonData.title || `Lección ${idx + 1}`;
+
+          const fullLessonJson = {
+            version: '1.0',
+            lesson: {
+              id: lessonId,
+              title,
+              description: lessonData.description || '',
+              order: Number(lessonData.order || (idx + 1)),
+              estimatedMinutes: Number(lessonData.estimatedMinutes || 15),
+              blocks: Array.isArray(lessonData.blocks) ? lessonData.blocks : [{ type: 'heading', id: 'h1', level: 1, content: title }],
+            },
+          };
+
+          await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || (idx + 1)), Number(lessonData.estimatedMinutes || 15))
+            .run();
+
+          await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
+          await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+            .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+            .run();
+
+          count++;
+        }
+        return json({ message: `${count} lecciones importadas con éxito`, courseId: targetCourseId }, 201);
+      }
+
+      // Caso 3: Lección individual (sea con o sin clave "lesson", o con "blocks" directos)
+      const lessonData = jsonData.lesson || jsonData;
+      const lessonId = lessonData.id || crypto.randomUUID();
+      const title = lessonData.title || 'Lección Importada';
+
+      const fullLessonJson = {
+        version: '1.0',
+        lesson: {
+          id: lessonId,
+          title,
+          description: lessonData.description || '',
+          order: Number(lessonData.order || 1),
+          estimatedMinutes: Number(lessonData.estimatedMinutes || 15),
+          blocks: Array.isArray(lessonData.blocks) ? lessonData.blocks : [{ type: 'heading', id: 'h1', level: 1, content: title }],
+        },
+      };
+
       await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', lessonData.order || 1, lessonData.estimatedMinutes || 15)
+        .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || 1), Number(lessonData.estimatedMinutes || 15))
         .run();
 
       await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
-      await db.prepare(`
-        INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
-        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
-      `).bind(crypto.randomUUID(), lessonId, JSON.stringify(jsonData)).run();
+      await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+        .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+        .run();
 
       return json({ message: 'Lección importada con éxito', id: lessonId, courseId: targetCourseId }, 201);
     }

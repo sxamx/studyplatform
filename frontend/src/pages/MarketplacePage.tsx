@@ -40,12 +40,14 @@ export const MarketplacePage: React.FC = () => {
     loadMarketplace();
   }, []);
 
+  const [showEnrolled, setShowEnrolled] = useState(false);
+
   const safeCourses = Array.isArray(courses) ? courses : [];
 
-  const filteredCourses = safeCourses.filter((c) => {
-    // Si el usuario ya está inscrito en el curso, se oculta del marketplace para evitar duplicidad
-    if (user && c.isEnrolled) return false;
+  // Filtramos según si el usuario desea ver los ya inscritos o solo cursos nuevos
+  const displayedPool = safeCourses.filter((c) => (user && !showEnrolled ? !c.isEnrolled : true));
 
+  const filteredCourses = displayedPool.filter((c) => {
     const matchesSearch =
       c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -54,6 +56,8 @@ export const MarketplacePage: React.FC = () => {
     if (filterType === 'paid') return matchesSearch && c.price > 0;
     return matchesSearch;
   });
+
+  const enrolledCount = safeCourses.filter((c) => c.isEnrolled).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -98,8 +102,8 @@ export const MarketplacePage: React.FC = () => {
       )}
 
       {/* Search & Filter Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-[#1A1A1A] p-4 rounded-2xl border border-[#E0E0E0] dark:border-[#2D2D2D] shadow-sm">
-        <div className="relative w-full sm:w-96">
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-center bg-white dark:bg-[#1A1A1A] p-4 rounded-2xl border border-[#E0E0E0] dark:border-[#2D2D2D] shadow-sm">
+        <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -110,37 +114,51 @@ export const MarketplacePage: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-          <button
-            onClick={() => setFilterType('all')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-              filterType === 'all'
-                ? 'bg-[#0066CC] text-white'
-                : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            Todos ({safeCourses.length})
-          </button>
-          <button
-            onClick={() => setFilterType('free')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-              filterType === 'free'
-                ? 'bg-[#10A950] text-white'
-                : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            Gratuitos ({safeCourses.filter((c) => c.price === 0).length})
-          </button>
-          <button
-            onClick={() => setFilterType('paid')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-              filterType === 'paid'
-                ? 'bg-[#0066CC] text-white'
-                : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
-            }`}
-          >
-            Premium ({safeCourses.filter((c) => c.price > 0).length})
-          </button>
+        <div className="flex flex-wrap items-center justify-between md:justify-end gap-3">
+          {user && enrolledCount > 0 && (
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-gray-400 cursor-pointer select-none bg-gray-50 dark:bg-[#141414] px-3 py-1.5 rounded-xl border border-[#E0E0E0] dark:border-[#2D2D2D]">
+              <input
+                type="checkbox"
+                checked={showEnrolled}
+                onChange={(e) => setShowEnrolled(e.target.checked)}
+                className="w-3.5 h-3.5 text-[#0066CC] rounded"
+              />
+              <span>Mostrar ya inscritos ({enrolledCount})</span>
+            </label>
+          )}
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+            <button
+              onClick={() => setFilterType('all')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition shrink-0 ${
+                filterType === 'all'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              Todos ({displayedPool.length})
+            </button>
+            <button
+              onClick={() => setFilterType('free')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition shrink-0 ${
+                filterType === 'free'
+                  ? 'bg-[#10A950] text-white'
+                  : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              Gratuitos ({displayedPool.filter((c) => c.price === 0).length})
+            </button>
+            <button
+              onClick={() => setFilterType('paid')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition shrink-0 ${
+                filterType === 'paid'
+                  ? 'bg-[#0066CC] text-white'
+                  : 'bg-gray-100 dark:bg-[#252525] text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              Premium ({displayedPool.filter((c) => c.price > 0).length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -155,7 +173,9 @@ export const MarketplacePage: React.FC = () => {
           {filteredCourses.map((course) => (
             <Card
               key={course.id}
-              className="overflow-hidden flex flex-col justify-between hover:border-[#0066CC] dark:hover:border-[#4D94FF] transition group"
+              className={`overflow-hidden flex flex-col justify-between hover:border-[#0066CC] dark:hover:border-[#4D94FF] transition group ${
+                course.isEnrolled ? 'border-emerald-500/30 bg-emerald-50/10' : ''
+              }`}
             >
               <div className="space-y-4">
                 {course.thumbnailUrl && (
@@ -165,7 +185,12 @@ export const MarketplacePage: React.FC = () => {
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute top-3 right-3">
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                      {course.isEnrolled && (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white shadow-md">
+                          Inscrito
+                        </span>
+                      )}
                       <Badge variant={course.price === 0 ? 'success' : 'primary'}>
                         {course.price === 0 ? 'Gratis' : `$${course.price.toFixed(2)} ${course.currency}`}
                       </Badge>
@@ -197,19 +222,54 @@ export const MarketplacePage: React.FC = () => {
                   <BookOpen className="w-3.5 h-3.5" /> {course.totalLessons} lecciones
                 </span>
 
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => navigate(`/marketplace/${course.id}`)}
-                  rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-                >
-                  Ver Detalles
-                </Button>
+                {course.isEnrolled ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/courses/${course.courseId}`)}
+                    className="border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-bold"
+                  >
+                    Ir al Curso
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => navigate(`/marketplace/${course.id}`)}
+                    rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                  >
+                    Ver Detalles
+                  </Button>
+                )}
               </div>
             </Card>
           ))}
 
-          {filteredCourses.length === 0 && (
+          {filteredCourses.length === 0 && safeCourses.length > 0 && !showEnrolled && (
+            <div className="col-span-full py-12 px-6 text-center border-2 border-dashed border-[#10A950]/30 bg-[#10A950]/5 rounded-3xl space-y-4">
+              <div className="w-14 h-14 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                🎉
+              </div>
+              <div className="max-w-md mx-auto space-y-1">
+                <h3 className="text-base font-bold text-[#1A1A1A] dark:text-white">
+                  ¡Ya tienes todos los cursos disponibles en tu catálogo!
+                </h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Todos los cursos publicados ya están guardados en tu sección de "Mis Cursos". Puedes continuar estudiando o ver los cursos inscritos aquí.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <Button variant="primary" size="sm" onClick={() => navigate('/')}>
+                  Ir a Mis Cursos
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowEnrolled(true)}>
+                  Ver Cursos Inscritos en Catálogo
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {filteredCourses.length === 0 && (safeCourses.length === 0 || showEnrolled) && (
             <div className="col-span-full py-16 text-center border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl">
               <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm font-semibold text-[#1A1A1A] dark:text-white">
