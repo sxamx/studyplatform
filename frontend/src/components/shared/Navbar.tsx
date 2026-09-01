@@ -4,6 +4,7 @@ import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag } from 
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
+import { GithubIcon, DiscordIcon } from './SocialIcons';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -77,7 +78,31 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Social Links */}
+          <div className="flex items-center gap-1">
+            <a
+              href="https://github.com/sxamx"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GitHub de sxamx"
+              className="p-2 rounded-lg text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white hover:bg-[#F5F5F5] dark:hover:bg-[#242424] transition-colors"
+            >
+              <GithubIcon className="w-4 h-4" />
+            </a>
+            <a
+              href="#discord"
+              onClick={(e) => {
+                e.preventDefault();
+                alert('¡Comunidad de Discord de StudyPlatform en preparación! El enlace oficial estará disponible muy pronto.');
+              }}
+              title="Comunidad en Discord (Próximamente)"
+              className="p-2 rounded-lg text-[#5865F2] hover:bg-[#5865F2]/10 transition-colors"
+            >
+              <DiscordIcon className="w-4 h-4" />
+            </a>
+          </div>
+
           <ThemeToggle />
 
           {user ? (

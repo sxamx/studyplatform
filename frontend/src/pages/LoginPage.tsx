@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { GraduationCap, Mail, Lock, ShieldCheck, UserCheck } from 'lucide-react';
+import { GraduationCap, Mail, Lock } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { Input } from '../components/shared/Input';
 import { Button } from '../components/shared/Button';
@@ -34,23 +34,8 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickLogin = async (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setIsLoading(true);
-    setError('');
-    try {
-      await login(demoEmail, demoPass);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Error en inicio rápido');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
@@ -63,33 +48,6 @@ export const LoginPage: React.FC = () => {
           <p className="text-xs text-[#666666] dark:text-[#B0B0B0]">
             Ingresa a tu cuenta para continuar con tu progreso
           </p>
-        </div>
-
-        {/* Demo Fast Access Pills */}
-        <div className="p-4 rounded-2xl bg-[#F5F5F5] dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] space-y-2.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[#666666] dark:text-[#808080] block text-center">
-            🚀 Cuentas Demo de 1-Clic
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => handleQuickLogin('admin@studyplatform.com', 'Admin123456!')}
-              leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-[#0066CC] dark:text-[#4D94FF]" />}
-            >
-              Demo Admin
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => handleQuickLogin('estudiante@studyplatform.com', 'Student123456!')}
-              leftIcon={<UserCheck className="w-3.5 h-3.5 text-[#10A950]" />}
-            >
-              Demo Alumno
-            </Button>
-          </div>
         </div>
 
         {/* Form Card */}

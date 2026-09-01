@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { Navbar } from './components/shared/Navbar';
+import { Footer } from './components/shared/Footer';
 import { DashboardPage } from './pages/DashboardPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 import { LessonPage } from './pages/LessonPage';
@@ -115,6 +116,7 @@ export const App: React.FC = () => {
         </Routes>
         </ErrorBoundary>
       </main>
+      <Footer />
     </div>
   );
 };
