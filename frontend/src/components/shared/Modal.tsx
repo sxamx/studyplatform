@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -45,13 +46,16 @@ export const Modal: React.FC<ModalProps> = ({
     full: 'max-w-6xl w-[95vw]',
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex items-center justify-center p-3 sm:p-6 bg-black/65 backdrop-blur-md animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className={`w-full ${maxWidthStyles[effectiveSize]} bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-150`}
+        className={`w-full ${maxWidthStyles[effectiveSize]} bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 relative z-10`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0E0E0] dark:border-[#2D2D2D]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0E0E0] dark:border-[#2D2D2D] bg-white/50 dark:bg-[#1A1A1A]/50">
           <h3 className="text-lg font-bold text-[#1A1A1A] dark:text-white truncate pr-4">{title}</h3>
           <button
             onClick={onClose}
@@ -64,4 +68,6 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
