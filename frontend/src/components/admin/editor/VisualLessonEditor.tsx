@@ -194,6 +194,23 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
           message: 'Recuerda siempre indentar tu código correctamente para mejorar su legibilidad.',
         };
         break;
+      case 'database_modeler':
+        newBlock = {
+          type: 'database_modeler',
+          id,
+          title: 'Ejercicio de Modelado ER',
+          instructions: 'Diseña el diagrama Entidad-Relación agregando las entidades y atributos requeridos.',
+          scenario: 'Crea las tablas y relaciones necesarias para el sistema.',
+          initialEntities: [
+            {
+              id: `ent_${Date.now()}_1`,
+              name: 'Usuario',
+              position: { x: 50, y: 60 },
+              attributes: [{ name: 'usuario_id', type: 'INTEGER', isPk: true }],
+            },
+          ],
+        };
+        break;
     }
 
     const blocks = [...lessonData.lesson.blocks, newBlock];
@@ -374,6 +391,12 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
                     className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-[#1A1A1A] dark:text-white"
                   >
                     <span>📝</span> Cuestionario (Quiz)
+                  </button>
+                  <button
+                    onClick={() => handleAddBlock('database_modeler')}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-[#1A1A1A] dark:text-white"
+                  >
+                    <span>🗄️</span> Lienzo ER (Data Modeler)
                   </button>
                 </div>
               )}

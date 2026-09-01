@@ -343,6 +343,44 @@ export const BlockEditModal: React.FC<BlockEditModalProps> = ({
           </div>
         );
 
+      case 'database_modeler':
+        return (
+          <div className="space-y-4">
+            <Input
+              label="Título del Ejercicio de Modelado"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="Ej. Modelado ER: Sistema de Ventas"
+              required
+            />
+            <Input
+              label="Instrucciones Breves"
+              value={formData.instructions || ''}
+              onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
+              placeholder="Diseña las entidades y relaciones..."
+              required
+            />
+            <div>
+              <label className="block text-xs font-semibold text-[#1A1A1A] dark:text-white mb-1">
+                Enunciado del Problema (Escenario)
+              </label>
+              <textarea
+                value={formData.scenario || ''}
+                onChange={(e) => setFormData({ ...formData, scenario: e.target.value })}
+                placeholder="Describe la lógica del negocio y requerimientos..."
+                rows={4}
+                className="w-full p-3 bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-lg text-xs text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC]"
+              />
+            </div>
+            <Input
+              label="Pista Opcional (Hint)"
+              value={formData.hint || ''}
+              onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
+              placeholder="Pista sobre claves foráneas o tablas intermedias"
+            />
+          </div>
+        );
+
       default:
         return (
           <p className="text-xs text-gray-500">

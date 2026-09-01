@@ -13,6 +13,7 @@ import {
   ArrowDown,
   Edit2,
   Trash2,
+  Database,
 } from 'lucide-react';
 import { Block, BlockType } from '../../../types';
 import { Badge } from '../../shared/Badge';
@@ -48,6 +49,8 @@ const getBlockTypeMeta = (type: BlockType) => {
       return { label: 'Cuestionario (Quiz)', icon: ListChecks, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/40' };
     case 'info':
       return { label: 'Alerta / Nota', icon: AlertCircle, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40' };
+    case 'database_modeler':
+      return { label: 'Lienzo ER (Data Modeler)', icon: Database, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/40' };
   }
 };
 
@@ -141,6 +144,13 @@ export const BlockCard: React.FC<BlockCardProps> = ({
           <div className="text-xs space-y-0.5">
             {block.title && <p className="font-semibold text-[#1A1A1A] dark:text-white">[{block.level || 'info'}] {block.title}</p>}
             <p className="text-[#666666] dark:text-[#B0B0B0] line-clamp-1">{block.message}</p>
+          </div>
+        );
+      case 'database_modeler':
+        return (
+          <div className="text-xs space-y-0.5">
+            <p className="font-semibold text-[#1A1A1A] dark:text-white">🗄️ {block.title}</p>
+            <p className="text-[#666666] dark:text-[#B0B0B0] line-clamp-1">{block.instructions}</p>
           </div>
         );
     }

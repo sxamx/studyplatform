@@ -9,6 +9,7 @@ import { QuestionChoiceBlock } from './blocks/QuestionChoiceBlock';
 import { QuestionFreeBlock } from './blocks/QuestionFreeBlock';
 import { QuizBlock } from './blocks/QuizBlock';
 import { InfoBlock } from './blocks/InfoBlock';
+import { DatabaseModelerBlock } from './blocks/DatabaseModelerBlock';
 
 interface BlockRendererProps {
   block: Block;
@@ -57,6 +58,14 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
       );
     case 'info':
       return <InfoBlock block={block} />;
+    case 'database_modeler':
+      return (
+        <DatabaseModelerBlock
+          block={block}
+          savedAnswer={savedAnswer}
+          onAnswerChange={(ans, isCorrect) => onAnswerChange?.(block.id, ans, isCorrect)}
+        />
+      );
     default:
       return (
         <div className="p-4 my-2 border border-red-300 rounded-lg text-xs text-red-500 font-mono">

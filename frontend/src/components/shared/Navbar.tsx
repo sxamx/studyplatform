@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, Sparkles } from 'lucide-react';
+import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
@@ -62,30 +62,17 @@ export const Navbar: React.FC = () => {
           </Link>
 
           {user?.role === 'ADMIN' && (
-            <>
-              <Link
-                to="/admin/wizard"
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  isActive('/admin/wizard')
-                    ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
-                    : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
-                }`}
-              >
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Asistente de Curso</span>
-              </Link>
-              <Link
-                to="/admin"
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                  isActive('/admin')
-                    ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
-                    : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Admin Panel</span>
-              </Link>
-            </>
+            <Link
+              to="/admin"
+              className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                isActive('/admin')
+                  ? 'bg-[#F5F5F5] dark:bg-[#1A1A1A] text-[#0066CC] dark:text-[#4D94FF]'
+                  : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </Link>
           )}
         </nav>
 

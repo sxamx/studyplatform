@@ -112,7 +112,64 @@ export const InfoBlockSchema = z.object({
   message: z.string().min(1),
 });
 
-// Discriminated Union of all 9 Blocks
+// 10. Database Modeler (ER Diagram Canvas) Block
+export const EntityAttributeSchema = z.object({
+  name: z.string().min(1),
+  type: z.string().min(1).default('VARCHAR(100)'),
+  isPk: z.boolean().optional(),
+  isFk: z.boolean().optional(),
+  isNullable: z.boolean().optional(),
+});
+
+export const EntityDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }).optional(),
+  attributes: z.array(EntityAttributeSchema).default([]),
+});
+
+export const RelationshipDefinitionSchema = z.object({
+  id: z.string().min(1),
+  sourceEntityId: z.string().min(1),
+  targetEntityId: z.string().min(1),
+  cardinality: z.enum(['1:1', '1:N', 'N:M']),
+  label: z.string().optional(),
+});
+
+export const ExpectedEntitySchema = z.object({
+  name: z.string().min(1),
+  attributes: z.array(z.object({
+    name: z.string().min(1),
+    isPk: z.boolean().optional(),
+    isFk: z.boolean().optional(),
+  })).optional(),
+});
+
+export const ExpectedRelationshipSchema = z.object({
+  source: z.string().min(1),
+  target: z.string().min(1),
+  cardinality: z.enum(['1:1', '1:N', 'N:M']),
+});
+
+export const DatabaseModelerBlockSchema = z.object({
+  type: z.literal('database_modeler'),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  instructions: z.string().min(1),
+  scenario: z.string().optional(),
+  initialEntities: z.array(EntityDefinitionSchema).optional(),
+  expectedModel: z.object({
+    entities: z.array(ExpectedEntitySchema).optional(),
+    relationships: z.array(ExpectedRelationshipSchema).optional(),
+  }).optional(),
+  hint: z.string().optional(),
+  required: z.boolean().default(true),
+});
+
+// Discriminated Union of all 10 Blocks
 export const BlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
   HeadingBlockSchema,
@@ -123,6 +180,7 @@ export const BlockSchema = z.discriminatedUnion('type', [
   QuestionFreeBlockSchema,
   QuizBlockSchema,
   InfoBlockSchema,
+  DatabaseModelerBlockSchema,
 ]);
 
 // Full Lesson Payload Schema

@@ -258,7 +258,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-gray-50 dark:bg-[#111111] border-t border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between gap-2">
+                <div className="px-6 pb-5 pt-3 border-t border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between gap-2 bg-transparent">
                   <div className="flex items-center gap-1">
                     <button
                       type="button"

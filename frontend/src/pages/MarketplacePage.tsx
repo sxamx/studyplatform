@@ -63,16 +63,6 @@ export const MarketplacePage: React.FC = () => {
             Cursos estructurados con lecciones interactivas, validaciones de código en tiempo real y certificación de progreso.
           </p>
         </div>
-
-        <div className="w-full md:w-auto flex flex-col sm:flex-row gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => navigate('/admin/wizard')}
-            leftIcon={<Sparkles className="w-4 h-4 text-[#0066CC]" />}
-          >
-            Crear Curso con Asistente
-          </Button>
-        </div>
       </div>
 
       {/* Filter and Search Bar */}

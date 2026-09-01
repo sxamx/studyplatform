@@ -7,7 +7,8 @@ export type BlockType =
   | 'question_choice'
   | 'question_free'
   | 'quiz'
-  | 'info';
+  | 'info'
+  | 'database_modeler';
 
 export interface TextBlock {
   type: 'text';
@@ -101,6 +102,52 @@ export interface InfoBlock {
   message: string;
 }
 
+// 10. Database Modeler Block (ER Diagram)
+export interface EntityAttribute {
+  name: string;
+  type: string;
+  isPk?: boolean;
+  isFk?: boolean;
+  isNullable?: boolean;
+}
+
+export interface EntityDefinition {
+  id: string;
+  name: string;
+  position?: { x: number; y: number };
+  attributes: EntityAttribute[];
+}
+
+export interface RelationshipDefinition {
+  id: string;
+  sourceEntityId: string;
+  targetEntityId: string;
+  cardinality: '1:1' | '1:N' | 'N:M';
+  label?: string;
+}
+
+export interface DatabaseModelerBlock {
+  type: 'database_modeler';
+  id: string;
+  title: string;
+  instructions: string;
+  scenario?: string;
+  initialEntities?: EntityDefinition[];
+  expectedModel?: {
+    entities?: {
+      name: string;
+      attributes?: { name: string; isPk?: boolean; isFk?: boolean }[];
+    }[];
+    relationships?: {
+      source: string;
+      target: string;
+      cardinality: '1:1' | '1:N' | 'N:M';
+    }[];
+  };
+  hint?: string;
+  required?: boolean;
+}
+
 export type Block =
   | TextBlock
   | HeadingBlock
@@ -110,7 +157,8 @@ export type Block =
   | QuestionChoiceBlock
   | QuestionFreeBlock
   | QuizBlock
-  | InfoBlock;
+  | InfoBlock
+  | DatabaseModelerBlock;
 
 export interface LessonData {
   id: string;
