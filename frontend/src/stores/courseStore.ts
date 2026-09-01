@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Course, CourseDetail, LessonDetail } from '../types';
 import { apiFetch } from '../api/client';
+import { fallbackCourses, fallbackCourseDetails, fallbackLessonDetails } from '../data/fallbackCourses';
 
 interface CourseState {
   courses: Course[];
@@ -14,7 +15,7 @@ interface CourseState {
 }
 
 export const useCourseStore = create<CourseState>((set, get) => ({
-  courses: [],
+  courses: fallbackCourses,
   activeCourse: null,
   activeLesson: null,
   isLoading: false,
@@ -22,34 +23,51 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     set({ isLoading: true });
     try {
       const data = await apiFetch<{ courses: Course[] }>('/courses');
-      set({ courses: data.courses, isLoading: false });
+      if (data && Array.isArray(data.courses) && data.courses.length > 0) {
+        set({ courses: data.courses, isLoading: false });
+      } else {
+        set({ courses: fallbackCourses, isLoading: false });
+      }
     } catch (err) {
-      set({ isLoading: false });
+      // Fallback seamlessly to embedded courses if API is offline
+      set({ courses: fallbackCourses, isLoading: false });
     }
   },
   fetchCourseById: async (id: string) => {
     set({ isLoading: true });
     try {
       const data = await apiFetch<CourseDetail>(`/courses/${id}`);
-      set({ activeCourse: data, isLoading: false });
+      if (data && data.id) {
+        set({ activeCourse: data, isLoading: false });
+      } else {
+        set({ activeCourse: fallbackCourseDetails[id] || null, isLoading: false });
+      }
     } catch (err) {
-      set({ isLoading: false });
+      set({ activeCourse: fallbackCourseDetails[id] || null, isLoading: false });
     }
   },
   fetchLessonById: async (id: string) => {
     set({ isLoading: true });
     try {
       const data = await apiFetch<LessonDetail>(`/lessons/${id}`);
-      set({ activeLesson: data, isLoading: false });
+      if (data && data.id) {
+        set({ activeLesson: data, isLoading: false });
+      } else {
+        set({ activeLesson: fallbackLessonDetails[id] || null, isLoading: false });
+      }
     } catch (err) {
-      set({ isLoading: false });
+      set({ activeLesson: fallbackLessonDetails[id] || null, isLoading: false });
     }
   },
   submitProgress: async (lessonId: string, answers: Record<string, any>, score = 100) => {
-    await apiFetch('/progress', {
-      method: 'POST',
-      body: JSON.stringify({ lessonId, answers, score }),
-    });
+    try {
+      await apiFetch('/progress', {
+        method: 'POST',
+        body: JSON.stringify({ lessonId, answers, score }),
+      });
+    } catch {
+      // Offline fallback: save progress locally in store
+    }
 
     const activeLesson = get().activeLesson;
     if (activeLesson && activeLesson.id === lessonId) {

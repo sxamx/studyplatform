@@ -91,12 +91,10 @@ export const Navbar: React.FC = () => {
               <GithubIcon className="w-4 h-4" />
             </a>
             <a
-              href="#discord"
-              onClick={(e) => {
-                e.preventDefault();
-                alert('¡Comunidad de Discord de StudyPlatform en preparación! El enlace oficial estará disponible muy pronto.');
-              }}
-              title="Comunidad en Discord (Próximamente)"
+              href="https://discord.gg/Q6msQeMWaE"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Unirse a la Comunidad en Discord"
               className="p-2 rounded-lg text-[#5865F2] hover:bg-[#5865F2]/10 transition-colors"
             >
               <DiscordIcon className="w-4 h-4" />

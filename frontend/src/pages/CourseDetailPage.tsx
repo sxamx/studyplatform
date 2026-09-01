@@ -27,8 +27,9 @@ export const CourseDetailPage: React.FC = () => {
     );
   }
 
-  const totalMinutes = activeCourse.lessons.reduce((acc, l) => acc + (l.estimatedMinutes || 15), 0);
-  const nextLesson = activeCourse.lessons.find((l) => !l.isCompleted) || activeCourse.lessons[0];
+  const lessons = Array.isArray(activeCourse.lessons) ? activeCourse.lessons : [];
+  const totalMinutes = lessons.reduce((acc, l) => acc + (l?.estimatedMinutes || 15), 0);
+  const nextLesson = lessons.find((l) => !l.isCompleted) || lessons[0];
 
   const hasModules = activeCourse.modules && activeCourse.modules.length > 0;
 

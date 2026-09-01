@@ -13,11 +13,12 @@ import { apiFetch } from '../api/client';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Badge } from '../components/shared/Badge';
+import { fallbackMarketplaceCourses } from '../data/fallbackCourses';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
-  const [courses, setCourses] = useState<MarketplaceCourse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [courses, setCourses] = useState<MarketplaceCourse[]>(fallbackMarketplaceCourses);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'free' | 'paid'>('all');
 
@@ -25,9 +26,13 @@ export const MarketplacePage: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await apiFetch<{ courses: MarketplaceCourse[] }>('/marketplace/courses');
-      setCourses(data.courses || []);
-    } catch (err) {
-      console.error('Error fetching marketplace:', err);
+      if (data && Array.isArray(data.courses) && data.courses.length > 0) {
+        setCourses(data.courses);
+      } else {
+        setCourses(fallbackMarketplaceCourses);
+      }
+    } catch {
+      setCourses(fallbackMarketplaceCourses);
     } finally {
       setIsLoading(false);
     }

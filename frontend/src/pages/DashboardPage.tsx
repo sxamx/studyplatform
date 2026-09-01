@@ -36,8 +36,9 @@ export const DashboardPage: React.FC = () => {
     fetchCourses();
   }, [fetchCourses]);
 
-  const totalCompletedLessons = courses.reduce((acc, c) => acc + c.completedLessons, 0);
-  const totalLessons = courses.reduce((acc, c) => acc + c.totalLessons, 0);
+  const safeCourses = Array.isArray(courses) ? courses : [];
+  const totalCompletedLessons = safeCourses.reduce((acc, c) => acc + (c?.completedLessons || 0), 0);
+  const totalLessons = safeCourses.reduce((acc, c) => acc + (c?.totalLessons || 0), 0);
   const overallPercentage = totalLessons > 0 ? Math.round((totalCompletedLessons / totalLessons) * 100) : 0;
 
   const handleUpdateStatus = async (courseId: string, status: 'in_progress' | 'completed' | 'archived') => {
@@ -74,10 +75,10 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  const filteredCourses = courses.filter((c) => {
-    const status = c.preferenceStatus || 'in_progress';
-    if (activeTab === 'in_progress') return status === 'in_progress' || (c.progressPercent < 100 && status !== 'archived');
-    if (activeTab === 'completed') return status === 'completed' || c.progressPercent === 100;
+  const filteredCourses = safeCourses.filter((c) => {
+    const status = c?.preferenceStatus || 'in_progress';
+    if (activeTab === 'in_progress') return status === 'in_progress' || ((c?.progressPercent || 0) < 100 && status !== 'archived');
+    if (activeTab === 'completed') return status === 'completed' || (c?.progressPercent || 0) === 100;
     if (activeTab === 'archived') return status === 'archived';
     return true;
   });
@@ -178,7 +179,7 @@ export const DashboardPage: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              🚀 En Progreso ({courses.filter((c) => (c.preferenceStatus || 'in_progress') !== 'archived').length})
+              🚀 En Progreso ({safeCourses.filter((c) => (c?.preferenceStatus || 'in_progress') !== 'archived').length})
             </button>
             <button
               onClick={() => setActiveTab('completed')}
@@ -188,7 +189,7 @@ export const DashboardPage: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              ✅ Completados ({courses.filter((c) => c.progressPercent === 100).length})
+              ✅ Completados ({safeCourses.filter((c) => (c?.progressPercent || 0) === 100).length})
             </button>
             <button
               onClick={() => setActiveTab('archived')}
@@ -198,7 +199,7 @@ export const DashboardPage: React.FC = () => {
                   : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              📦 Archivados ({courses.filter((c) => c.preferenceStatus === 'archived').length})
+              📦 Archivados ({safeCourses.filter((c) => c?.preferenceStatus === 'archived').length})
             </button>
           </div>
         </div>

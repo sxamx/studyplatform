@@ -39,18 +39,14 @@ export const Footer: React.FC = () => {
 
             {/* Discord Link */}
             <a
-              href="#discord"
-              onClick={(e) => {
-                e.preventDefault();
-                alert('¡Comunidad de Discord de StudyPlatform en preparación! El enlace oficial estará disponible muy pronto.');
-              }}
+              href="https://discord.gg/Q6msQeMWaE"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 dark:bg-[#5865F2]/15 dark:hover:bg-[#5865F2]/25 border border-[#5865F2]/30 text-xs font-bold text-[#5865F2] transition-all shadow-sm group"
             >
               <DiscordIcon className="w-4 h-4 text-[#5865F2] group-hover:scale-110 transition-transform" />
               <span>Comunidad Discord</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#5865F2] text-white">
-                Próximamente
-              </span>
+              <ExternalLink className="w-3 h-3 text-[#5865F2] opacity-70" />
             </a>
           </div>
         </div>
