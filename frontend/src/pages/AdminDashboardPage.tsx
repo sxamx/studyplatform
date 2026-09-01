@@ -82,6 +82,30 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleToggleSuspendUser = async (userId: string, isCurrentlySuspended: boolean) => {
+    const action = isCurrentlySuspended ? 'reactivar' : 'suspender';
+    if (!window.confirm(`¿Deseas ${action} el acceso a esta cuenta de usuario?`)) return;
+    try {
+      await apiFetch(`/admin/users/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isSuspended: !isCurrentlySuspended }),
+      });
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar estado del usuario');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!window.confirm(`⚠️ ACCIÓN CRÍTICA: ¿Estás seguro de eliminar permanentemente la cuenta (${email}) y todo su progreso?\n\nEsta acción no se puede deshacer.`)) return;
+    try {
+      await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar usuario');
+    }
+  };
+
   const handleTogglePublish = async (course: Course) => {
     try {
       await apiFetch(`/courses/${course.id}`, {
@@ -118,30 +142,30 @@ export const AdminDashboardPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsPromptsModalOpen(true)}
-            leftIcon={<Sparkles className="w-4 h-4 text-amber-500" />}
-          >
-            Prompts para IA
-          </Button>
-
-          <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
             onClick={() => setIsLogsModalOpen(true)}
-            leftIcon={<FileText className="w-4 h-4 text-[#0066CC]" />}
+            leftIcon={<FileText className="w-4 h-4 text-emerald-500" />}
           >
-            Logs del Sistema
+            Registro de Logs
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/admin/upload-json')}
-            leftIcon={<Upload className="w-4 h-4" />}
+            onClick={() => setIsPromptsModalOpen(true)}
+            leftIcon={<Sparkles className="w-4 h-4 text-purple-500" />}
+          >
+            Prompts de IA
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/upload')}
+            leftIcon={<Upload className="w-4 h-4 text-[#0066CC]" />}
           >
             Subir JSON
           </Button>
@@ -230,7 +254,7 @@ export const AdminDashboardPage: React.FC = () => {
             {stats?.averageCompletionRate ?? 0}%
           </p>
           <span className="text-[11px] text-[#666666] dark:text-[#808080] mt-1 block">
-            Promedio de progreso
+            Promedio de progreso real
           </span>
         </Card>
       </div>
@@ -334,9 +358,16 @@ export const AdminDashboardPage: React.FC = () => {
 
       {/* Users Table */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white tracking-tight">
-          Usuarios Registrados ({users.length})
-        </h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white tracking-tight">
+              Gestión de Usuarios y Cuentas ({users.length})
+            </h2>
+            <p className="text-xs text-gray-500">
+              Control de acceso, prevención de multicuentas y seguimiento de actividad
+            </p>
+          </div>
+        </div>
 
         <Card className="p-0 overflow-hidden">
           <div className="overflow-x-auto">
@@ -345,33 +376,79 @@ export const AdminDashboardPage: React.FC = () => {
                 <tr>
                   <th className="px-6 py-4">Usuario</th>
                   <th className="px-6 py-4">Rol</th>
-                  <th className="px-6 py-4">Lecciones Completadas</th>
+                  <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Progreso</th>
                   <th className="px-6 py-4">Último Acceso</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E0E0E0] dark:divide-[#2D2D2D]">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-[#F5F5F5]/40 dark:hover:bg-[#242424]/40 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-[#1A1A1A] dark:text-white">{u.fullName || 'Usuario'}</div>
-                      <div className="text-xs text-[#666666] dark:text-[#808080]">{u.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge variant={u.role === 'ADMIN' ? 'primary' : 'secondary'}>
-                        {u.role}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 text-xs font-semibold text-[#666666] dark:text-[#B0B0B0]">
-                      <span className="font-bold text-[#1A1A1A] dark:text-white">
-                        {u.completedLessons ?? 0}
-                      </span>{' '}
-                      {(u.completedLessons ?? 0) === 1 ? 'lección' : 'lecciones'}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-[#666666] dark:text-[#808080]">
-                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Reciente'}
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const isSuspended = Boolean(u.isSuspended);
+                  const isAdmin = u.role === 'ADMIN';
+
+                  return (
+                    <tr key={u.id} className={`hover:bg-[#F5F5F5]/40 dark:hover:bg-[#242424]/40 transition-colors ${isSuspended ? 'opacity-60 bg-rose-50/20' : ''}`}>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-[#1A1A1A] dark:text-white flex items-center gap-2">
+                          <span>{u.fullName || 'Usuario'}</span>
+                          {isAdmin && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                              👑 Admin
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#666666] dark:text-[#808080] font-mono">{u.email}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge variant={isAdmin ? 'primary' : 'secondary'}>
+                          {u.role}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge variant={isSuspended ? 'error' : 'success'}>
+                          {isSuspended ? '🔴 Suspendido' : '🟢 Activo'}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 text-xs font-semibold text-[#666666] dark:text-[#B0B0B0]">
+                        <span className="font-bold text-[#1A1A1A] dark:text-white">
+                          {u.completedLessons ?? 0}
+                        </span>{' '}
+                        {(u.completedLessons ?? 0) === 1 ? 'lección' : 'lecciones'}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-[#666666] dark:text-[#808080]">
+                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Reciente'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {isAdmin ? (
+                          <span className="text-[11px] font-bold text-gray-400 italic">
+                            Protegido
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant={isSuspended ? 'primary' : 'outline'}
+                              size="sm"
+                              onClick={() => handleToggleSuspendUser(u.id, isSuspended)}
+                              className="text-xs"
+                            >
+                              {isSuspended ? 'Reactivar' : 'Suspender'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteUser(u.id, u.email)}
+                              className="text-[#DC3545] hover:text-[#C82333]"
+                              title="Eliminar Cuenta"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,0 +1,282 @@
+{
+  "version": "1.0",
+  "lesson": {
+    "id": "lesson_master_demo_001",
+    "title": "Master Demo: Todas las Capacidades Visuales e Interactivas",
+    "description": "Lección de prueba que exhibe todos los tipos de bloques soportados: Markdown rico, tablas libres, diagramas Mermaid, LaTeX, pestañas, acordeones, steppers, recursos, evaluadores y modelador ER.",
+    "order": 1,
+    "estimatedMinutes": 25,
+    "blocks": [
+      {
+        "type": "heading",
+        "id": "blk_h1",
+        "level": 1,
+        "content": "1. Encabezados y Formato de Texto Enriquecido"
+      },
+      {
+        "type": "text",
+        "id": "blk_txt_md",
+        "content": "Este bloque demuestra el soporte completo de **Markdown nativo** dentro de la plataforma:\n\n- **Negritas** y *Cursivas* para énfasis.\n- Código en línea como `ArrayList<String> lista = new ArrayList<>();` con resaltado monoespaciado.\n- Listas de tareas y recomendaciones prácticas.\n\n> *\"El buen código es su propia mejor documentación. A medida que agregues código, hazlo pensando en la persona que lo mantendrá después.\"* — Steve McConnell"
+      },
+      {
+        "type": "info",
+        "id": "blk_info_tip",
+        "level": "tip",
+        "title": "Consejo Profesional de Rendimiento",
+        "message": "Utiliza **StringBuilder** en lugar de concatenaciones con `+` dentro de bucles de alta frecuencia para evitar sobrecargar el recolector de basura (Garbage Collector)."
+      },
+      {
+        "type": "divider",
+        "id": "blk_div_1",
+        "label": "Estructuras y Comparativas"
+      },
+      {
+        "type": "heading",
+        "id": "blk_h2",
+        "level": 2,
+        "content": "2. Tablas Comparativas Dinámicas y Libres"
+      },
+      {
+        "type": "table",
+        "id": "blk_tbl_comp",
+        "title": "Comparativa Técnica: Estructuras de Datos en Java",
+        "headers": ["Criterio", "ArrayList", "LinkedList", "HashMap", "Veredicto"],
+        "rows": [
+          ["Acceso por Índice", "`O(1)` Inmediato", "`O(n)` Secuencial", "`N/A` (Por Clave)", "🏆 ArrayList gana en lectura rápida"],
+          ["Inserción al Inicio", "`O(n)` Desplazamiento", "`O(1)` Conexión de Punteros", "`O(1)` Clave única", "🏆 LinkedList óptimo para colas"],
+          ["Búsqueda por Valor", "`O(n)` Recorrido lineal", "`O(n)` Recorrido lineal", "`O(1)` Hash Indexado", "🏆 HashMap óptimo para consultas por ID"],
+          ["Consumo de RAM", "Bajo (Array continuo)", "Medio-Alto (Nodos con punteros)", "Medio (Cubetas y colisiones)", "💡 Depende del caso de uso"]
+        ]
+      },
+      {
+        "type": "heading",
+        "id": "blk_h3",
+        "level": 2,
+        "content": "3. Diagramas Vectoriales Inteligentes (Mermaid.js)"
+      },
+      {
+        "type": "diagram",
+        "id": "blk_diag_flow",
+        "title": "Flujo de Ejecución y Manejo de Excepciones",
+        "syntax": "graph TD;\n  A[Inicio del Programa] --> B{¿Archivo Existe?};\n  B -- Sí --> C[Abrir FileInputStream];\n  B -- No --> D[Lanzar FileNotFoundException];\n  C --> E[Procesar Bytes en Bloque];\n  E --> F[Cerrar Stream en bloque finally];\n  D --> G[Manejador catch y Log de Error];\n  F --> H[Fin Exitoso];\n  G --> H;",
+        "caption": "Diagrama de flujo de control de entrada y salida (I/O) en Java"
+      },
+      {
+        "type": "heading",
+        "id": "blk_h4",
+        "level": 2,
+        "content": "4. Notación Científica y Matemáticas con LaTeX (KaTeX)"
+      },
+      {
+        "type": "math",
+        "id": "blk_math_complexity",
+        "title": "Fórmula Maestra de Complejidad Algorítmica",
+        "expression": "T(n) = 2T\\left(\\frac{n}{2}\\right) + \\Theta(n) \\implies T(n) = \\Theta(n \\log n)",
+        "explanation": "Teorema Maestro aplicado a los algoritmos de ordenamiento divide y vencerás (Merge Sort y Quick Sort promedio)."
+      },
+      {
+        "type": "heading",
+        "id": "blk_h5",
+        "level": 2,
+        "content": "5. Pestañas Interactivas Multilenguaje (Tabs Estilo Notion)"
+      },
+      {
+        "type": "tabs",
+        "id": "blk_tabs_code",
+        "title": "Implementación del Patrón Singleton en Varios Lenguajes",
+        "tabs": [
+          {
+            "id": "tab_java",
+            "label": "☕ Java (Thread-Safe)",
+            "language": "java",
+            "content": "public class DatabaseConnection {\n    private static volatile DatabaseConnection instance;\n    private DatabaseConnection() {}\n\n    public static DatabaseConnection getInstance() {\n        if (instance == null) {\n            synchronized (DatabaseConnection.class) {\n                if (instance == null) {\n                    instance = new DatabaseConnection();\n                }\n            }\n        }\n        return instance;\n    }\n}"
+          },
+          {
+            "id": "tab_python",
+            "label": "🐍 Python",
+            "language": "python",
+            "content": "class DatabaseConnection:\n    _instance = None\n\n    def __new__(cls):\n        if cls._instance is None:\n            cls._instance = super(DatabaseConnection, cls).__new__(cls)\n        return cls._instance"
+          },
+          {
+            "id": "tab_ts",
+            "label": "🔷 TypeScript",
+            "language": "typescript",
+            "content": "export class DatabaseConnection {\n  private static instance: DatabaseConnection;\n  private constructor() {}\n\n  public static getInstance(): DatabaseConnection {\n    if (!DatabaseConnection.instance) {\n      DatabaseConnection.instance = new DatabaseConnection();\n    }\n    return DatabaseConnection.instance;\n  }\n}"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "id": "blk_h6",
+        "level": 2,
+        "content": "6. Acordeón Desplegable (Pistas y Profundización)"
+      },
+      {
+        "type": "accordion",
+        "id": "blk_acc_hint",
+        "title": "💡 ¿Por qué Java utiliza un String Constant Pool?",
+        "content": "Los Strings representan un porcentaje enorme de los objetos en cualquier aplicación. Java utiliza una tabla de internamiento (**String Constant Pool**) para reutilizar literales idénticos en memoria RAM, evitando crear duplicados cada vez que se declara `String s = \"hola\";`.",
+        "defaultOpen": false
+      },
+      {
+        "type": "heading",
+        "id": "blk_h7",
+        "level": 2,
+        "content": "7. Guía Paso a Paso con Conectores (Stepper)"
+      },
+      {
+        "type": "stepper",
+        "id": "blk_step_guide",
+        "title": "Proceso de Conexión JDBC a Base de Datos",
+        "steps": [
+          {
+            "title": "Paso 1: Cargar el Driver JDBC",
+            "description": "Asegúrate de que la dependencia de SQLite o PostgreSQL esté en el `pom.xml` o classpath.",
+            "code": "Class.forName(\"org.sqlite.JDBC\");"
+          },
+          {
+            "title": "Paso 2: Abrir la Conexión con DriverManager",
+            "description": "Establece el canal de comunicación mediante la URL de conexión.",
+            "code": "Connection conn = DriverManager.getConnection(\"jdbc:sqlite:studyplatform.db\");"
+          },
+          {
+            "title": "Paso 3: Ejecutar consultas con PreparedStatement",
+            "description": "Utiliza sentencias parametrizadas para prevenir ataques de inyección SQL.",
+            "code": "PreparedStatement ps = conn.prepareStatement(\"SELECT * FROM users WHERE id = ?\");\nps.setString(1, userId);\nResultSet rs = ps.executeQuery();"
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "id": "blk_h8",
+        "level": 2,
+        "content": "8. Bloque de Código Fuente con Copiado Rápido"
+      },
+      {
+        "type": "code",
+        "id": "blk_code_example",
+        "language": "java",
+        "code": "public class Calculadora {\n    public static int sumar(int a, int b) {\n        return a + b;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(\"Resultado: \" + sumar(15, 27));\n    }\n}",
+        "copyable": true
+      },
+      {
+        "type": "heading",
+        "id": "blk_h9",
+        "level": 2,
+        "content": "9. Recursos Descargables y Archivos Adjuntos"
+      },
+      {
+        "type": "resource",
+        "id": "blk_res_download",
+        "title": "Código Fuente del Proyecto Completo",
+        "description": "Descarga el repositorio empaquetado en formato ZIP con todos los ejercicios y pruebas unitarias.",
+        "url": "https://github.com/sxamx/studyplatform/archive/refs/heads/master.zip",
+        "fileType": "zip",
+        "fileSize": "3.8 MB"
+      },
+      {
+        "type": "divider",
+        "id": "blk_div_eval",
+        "label": "Módulo de Evaluación y Retos Prácticos"
+      },
+      {
+        "type": "heading",
+        "id": "blk_h10",
+        "level": 2,
+        "content": "10. Pregunta de Selección Única"
+      },
+      {
+        "type": "question_choice",
+        "id": "blk_q_single",
+        "question": "¿Cuál es la diferencia principal entre el operador `==` y el método `.equals()` al comparar objetos en Java?",
+        "multiple": false,
+        "options": [
+          { "id": "opt_s1", "text": "`==` compara las direcciones de memoria RAM (referencia), mientras que `.equals()` compara el contenido de los objetos.", "isCorrect": true },
+          { "id": "opt_s2", "text": "`==` compara el contenido y `.equals()` compara la memoria.", "isCorrect": false },
+          { "id": "opt_s3", "text": "Ambos son exactamente idénticos y se pueden usar indistintamente.", "isCorrect": false }
+        ],
+        "explanation": "El operador `==` verifica si ambas variables apuntan a la misma ubicación en memoria, mientras que `.equals()` evalúa el estado o contenido interno del objeto."
+      },
+      {
+        "type": "heading",
+        "id": "blk_h11",
+        "level": 2,
+        "content": "11. Pregunta de Selección Múltiple (Checkboxes con varias correctas)"
+      },
+      {
+        "type": "question_choice",
+        "id": "blk_q_multi",
+        "question": "¿Cuáles de las siguientes opciones son **buenas prácticas** de concurrencia y POO en Java? (Selecciona todas las correctas)",
+        "multiple": true,
+        "options": [
+          { "id": "opt_m1", "text": "Hacer inmutables las clases cuyos estados no deban cambiar tras la creación.", "isCorrect": true },
+          { "id": "opt_m2", "text": "Usar `synchronized` o `AtomicInteger` para evitar condiciones de carrera (Race Conditions).", "isCorrect": true },
+          { "id": "opt_m3", "text": "Declarar todos los atributos públicos para evitar escribir métodos getter y setter.", "isCorrect": false },
+          { "id": "opt_m4", "text": "Cerrar siempre los recursos de bases de datos o archivos mediante bloques `try-with-resources`.", "isCorrect": true }
+        ],
+        "explanation": "La inmutabilidad, el control de concurrencia y el uso de `try-with-resources` son pilares esenciales. Romper el encapsulamiento haciendo campos públicos es una mala práctica de diseño."
+      },
+      {
+        "type": "heading",
+        "id": "blk_h12",
+        "level": 2,
+        "content": "12. Pregunta de Respuesta Libre de Código"
+      },
+      {
+        "type": "question_free",
+        "id": "blk_q_free",
+        "question": "Escribe la línea de código exacta para instanciar un arreglo dinámico de Strings llamado `nombres` en Java:",
+        "expectedAnswer": "ArrayList<String> nombres = new ArrayList<>();",
+        "hint": "Recuerda usar el operador diamond <> y new ArrayList"
+      },
+      {
+        "type": "heading",
+        "id": "blk_h13",
+        "level": 2,
+        "content": "13. Modelador de Bases de Datos (Lienzo Virtual ER)"
+      },
+      {
+        "type": "database_modeler",
+        "id": "blk_db_modeler",
+        "title": "Reto Práctico: Modelado Entidad-Relación de Cursos y Estudiantes",
+        "instructions": "Analiza el escenario y conecta la tabla 'estudiantes' con la tabla 'inscripciones' usando la clave foránea adecuada.",
+        "scenario": "Un estudiante puede tener múltiples inscripciones a lo largo de su carrera. Cada inscripción pertenece a un único estudiante.",
+        "initialEntities": [
+          {
+            "id": "ent_estudiantes",
+            "name": "estudiantes",
+            "notes": "Tabla principal de alumnos",
+            "position": { "x": 60, "y": 80 },
+            "attributes": [
+              { "name": "id", "type": "VARCHAR(36)", "isPk": true },
+              { "name": "nombre", "type": "VARCHAR(100)" },
+              { "name": "correo", "type": "VARCHAR(150)" }
+            ]
+          },
+          {
+            "id": "ent_inscripciones",
+            "name": "inscripciones",
+            "notes": "Tabla de registro a cursos",
+            "position": { "x": 380, "y": 80 },
+            "attributes": [
+              { "name": "id", "type": "VARCHAR(36)", "isPk": true },
+              { "name": "estudiante_id", "type": "VARCHAR(36)", "isFk": true },
+              { "name": "curso_id", "type": "VARCHAR(36)", "isFk": true },
+              { "name": "fecha_registro", "type": "DATETIME" }
+            ]
+          }
+        ],
+        "expectedModel": {
+          "entities": [
+            { "name": "estudiantes", "attributes": [{ "name": "id", "isPk": true }] },
+            { "name": "inscripciones", "attributes": [{ "name": "estudiante_id", "isFk": true }] }
+          ],
+          "relationships": [
+            { "source": "estudiantes", "target": "inscripciones", "cardinality": "1:N" }
+          ]
+        },
+        "hint": "Crea una relación 1:N desde 'estudiantes' hacia 'inscripciones' vinculando 'id' con 'estudiante_id'."
+      }
+    ]
+  }
+}

@@ -180,6 +180,19 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
   try {
     // -------------------------------------------------------------
+    // D1 Auto-Migrations (Ensures new columns exist without breaking live DB)
+    // -------------------------------------------------------------
+    try {
+      await db.prepare('ALTER TABLE courses ADD COLUMN sequential_unlock INTEGER DEFAULT 0').run();
+    } catch (_) {}
+    try {
+      await db.prepare('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1').run();
+    } catch (_) {}
+    try {
+      await db.prepare('ALTER TABLE users ADD COLUMN is_suspended INTEGER DEFAULT 0').run();
+    } catch (_) {}
+
+    // -------------------------------------------------------------
     // AUTH: Register
     // -------------------------------------------------------------
     if (path === '/auth/register' && method === 'POST') {
@@ -196,7 +209,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const role = Number(countRow?.c || 0) === 0 ? 'ADMIN' : 'USER';
 
       await db
-        .prepare('INSERT INTO users (id, email, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)')
+        .prepare('INSERT INTO users (id, email, password_hash, full_name, role, is_active, is_suspended) VALUES (?, ?, ?, ?, ?, 1, 0)')
         .bind(userId, email.toLowerCase(), pwdHash, fullName || email.split('@')[0], role)
         .run();
 
@@ -215,6 +228,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email.toLowerCase()).first() as any;
       if (!user) return json({ error: 'Credenciales inválidas' }, 401);
+
+      if (user.is_suspended === 1 || user.is_active === 0) {
+        return json({ error: 'Esta cuenta ha sido suspendida. Contacta al administrador.' }, 403);
+      }
 
       const isValid = await verifyPassword(password, user.password_hash);
       if (!isValid) return json({ error: 'Credenciales inválidas' }, 401);
@@ -1126,7 +1143,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     // -------------------------------------------------------------
-    // ADMIN: Stats & Users & Logs
+    // ADMIN: Stats & Users & Logs & User Management
     // -------------------------------------------------------------
     if (path === '/admin/stats' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
@@ -1134,13 +1151,34 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const coursesRow = await db.prepare('SELECT COUNT(*) as c FROM courses').first() as any;
       const lessonsRow = await db.prepare('SELECT COUNT(*) as c FROM lessons').first() as any;
       const progressRow = await db.prepare('SELECT COUNT(*) as c FROM user_progress WHERE completed = 1').first() as any;
+      const activeWeekRow = await db.prepare("SELECT COUNT(*) as c FROM users WHERE last_login_at >= datetime('now', '-7 days')").first() as any;
+
+      // Real dynamic average completion rate across enrolled courses
+      const enrollmentsRes = await db.prepare(`
+        SELECT ucp.user_id, ucp.course_id,
+          (SELECT COUNT(*) FROM lessons WHERE course_id = ucp.course_id) as total_l,
+          (SELECT COUNT(DISTINCT up.lesson_id) FROM user_progress up JOIN lessons l ON l.id = up.lesson_id WHERE up.user_id = ucp.user_id AND up.completed = 1 AND l.course_id = ucp.course_id) as comp_l
+        FROM user_course_preferences ucp
+      `).all();
+
+      let totalPercentSum = 0;
+      let enrollmentCount = 0;
+      for (const row of (enrollmentsRes.results || []) as any[]) {
+        const total = Number(row.total_l || 0);
+        const comp = Number(row.comp_l || 0);
+        if (total > 0) {
+          totalPercentSum += Math.min(100, Math.round((comp / total) * 100));
+          enrollmentCount++;
+        }
+      }
+      const averageCompletionRate = enrollmentCount > 0 ? Math.round(totalPercentSum / enrollmentCount) : 0;
 
       return json({
         totalUsers: Number(usersRow?.c || 0),
         totalCourses: Number(coursesRow?.c || 0),
         totalLessons: Number(lessonsRow?.c || 0),
-        activeUsersThisWeek: Number(usersRow?.c || 0),
-        averageCompletionRate: 0,
+        activeUsersThisWeek: Math.max(1, Number(activeWeekRow?.c || 0)),
+        averageCompletionRate,
         completedLessonsTotal: Number(progressRow?.c || 0),
       });
     }
@@ -1148,12 +1186,50 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path === '/admin/users' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       const usersRes = await db.prepare(`
-        SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference, u.created_at as createdAt, u.last_login_at as lastLoginAt,
-          (SELECT COUNT(*) FROM user_progress WHERE user_id = u.id AND completed = 1) as completedLessons
+        SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference,
+          COALESCE(u.is_active, 1) as isActive, COALESCE(u.is_suspended, 0) as isSuspended,
+          u.created_at as createdAt, u.last_login_at as lastLoginAt,
+          (SELECT COUNT(DISTINCT lesson_id) FROM user_progress WHERE user_id = u.id AND completed = 1) as completedLessons
         FROM users u
         ORDER BY u.created_at DESC
       `).all();
       return json({ users: usersRes.results || [] });
+    }
+
+    if (path.startsWith('/admin/users/') && path.endsWith('/status') && method === 'PATCH') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const targetUserId = path.replace('/admin/users/', '').replace('/status', '');
+      const targetUser = await db.prepare('SELECT id, role, email FROM users WHERE id = ?').bind(targetUserId).first() as any;
+      if (!targetUser) return json({ error: 'Usuario no encontrado' }, 404);
+
+      if (targetUser.role === 'ADMIN' || targetUser.id === currentUser.id) {
+        return json({ error: 'No se puede suspender ni alterar la cuenta del Administrador Principal.' }, 400);
+      }
+
+      const body = await request.json() as any;
+      const isSuspended = body.isSuspended ? 1 : 0;
+      const isActive = isSuspended ? 0 : 1;
+
+      await db.prepare('UPDATE users SET is_suspended = ?, is_active = ? WHERE id = ?').bind(isSuspended, isActive, targetUserId).run();
+      return json({ message: isSuspended ? 'Usuario suspendido exitosamente' : 'Usuario reactivado', isSuspended: Boolean(isSuspended) });
+    }
+
+    if (path.startsWith('/admin/users/') && method === 'DELETE') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const targetUserId = path.replace('/admin/users/', '');
+      const targetUser = await db.prepare('SELECT id, role, email FROM users WHERE id = ?').bind(targetUserId).first() as any;
+      if (!targetUser) return json({ error: 'Usuario no encontrado' }, 404);
+
+      if (targetUser.role === 'ADMIN' || targetUser.id === currentUser.id) {
+        return json({ error: 'Seguridad: La cuenta del Administrador Principal está blindada y no se puede eliminar.' }, 400);
+      }
+
+      // Cascading cleanup of progress & preferences
+      await db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId).run();
+      await db.prepare('DELETE FROM user_course_preferences WHERE user_id = ?').bind(targetUserId).run();
+      await db.prepare('DELETE FROM users WHERE id = ?').bind(targetUserId).run();
+
+      return json({ message: 'Cuenta de usuario eliminada de forma segura' });
     }
 
     if (path === '/admin/logs' && method === 'GET') {
