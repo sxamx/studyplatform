@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload, FileCode, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { Button } from '../shared/Button';
+import { Badge } from '../shared/Badge';
 import { Course } from '../../types';
 
 interface JSONUploaderProps {
@@ -12,30 +13,115 @@ interface JSONUploaderProps {
 export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuccess }) => {
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courses[0]?.id || '');
   const [jsonText, setJsonText] = useState<string>('');
-  const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<Array<{ path: string; message: string }> | null>(null);
   const [successData, setSuccessData] = useState<any | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      setFile(selected);
-      setError(null);
-      setErrorDetails(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [loadedFilesInfo, setLoadedFilesInfo] = useState<{ name: string; type: string }[]>([]);
 
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        setJsonText(evt.target?.result as string);
-      };
-      reader.readAsText(selected);
+  // Process single or multiple JSON files (from picker or drag & drop)
+  const processJsonFiles = async (filesList: File[]) => {
+    setError(null);
+    setErrorDetails(null);
+    setSuccessData(null);
+
+    const jsonFiles = filesList.filter(
+      (f) => f.name.endsWith('.json') || f.type.includes('json') || f.type === ''
+    );
+
+    if (jsonFiles.length === 0) {
+      setError('No se encontraron archivos con extensión .json en la selección.');
+      return;
+    }
+
+    const filesInfo: { name: string; type: string }[] = [];
+
+    if (jsonFiles.length === 1) {
+      try {
+        const text = await jsonFiles[0].text();
+        const parsed = JSON.parse(text);
+        setJsonText(JSON.stringify(parsed, null, 2));
+        const fileKind = parsed.course || parsed.modules
+          ? 'Curso Completo'
+          : (parsed.lesson || parsed.blocks ? 'Lección' : 'JSON');
+        filesInfo.push({ name: jsonFiles[0].name, type: fileKind });
+      } catch (err: any) {
+        setError(`Error de sintaxis en "${jsonFiles[0].name}": ${err.message}`);
+      }
+    } else {
+      let courseManifest: any = null;
+      const lessonFiles: { name: string; content: any }[] = [];
+      const errors: string[] = [];
+
+      for (const file of jsonFiles) {
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          const lower = file.name.toLowerCase();
+
+          if (
+            lower === 'course.json' ||
+            lower === 'manifest.json' ||
+            lower === 'index.json' ||
+            parsed.course ||
+            (parsed.title && parsed.modules)
+          ) {
+            courseManifest = parsed;
+            filesInfo.push({ name: file.name, type: 'Manifiesto del Curso' });
+          } else {
+            lessonFiles.push({ name: file.name, content: parsed });
+            filesInfo.push({ name: file.name, type: 'Lección' });
+          }
+        } catch (err: any) {
+          errors.push(`Error en "${file.name}": ${err.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        setError(errors.join(' | '));
+      }
+
+      const bundlePayload = courseManifest || lessonFiles.length > 0
+        ? { manifest: courseManifest, lessons: lessonFiles }
+        : null;
+
+      if (bundlePayload) {
+        setJsonText(JSON.stringify(bundlePayload, null, 2));
+      }
+    }
+
+    setLoadedFilesInfo(filesInfo);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files);
+      await processJsonFiles(filesArray);
     }
   };
 
   const handleUpload = async () => {
-    if (!jsonText.trim() && !file) {
-      setError('Por favor sube un archivo JSON o pega el contenido JSON.');
+    if (!jsonText.trim() && loadedFilesInfo.length === 0) {
+      setError('Por favor sube o arrastra un archivo JSON o pega el contenido JSON.');
       return;
     }
 
@@ -64,7 +150,7 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
 
       setSuccessData(res);
       setJsonText('');
-      setFile(null);
+      setLoadedFilesInfo([]);
       if (onUploadSuccess) {
         onUploadSuccess(res);
       }
@@ -141,27 +227,54 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
       </div>
 
       {/* Drag and Drop Zone */}
-      <div className="border-2 border-dashed border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] rounded-2xl p-8 text-center transition-colors bg-[#F5F5F5]/50 dark:bg-[#1A1A1A]/50">
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors space-y-3 ${
+          isDragging
+            ? 'border-[#0066CC] bg-[#0066CC]/10 dark:bg-[#0066CC]/20'
+            : 'border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] bg-[#F5F5F5]/50 dark:bg-[#1A1A1A]/50'
+        }`}
+      >
         <input
+          ref={fileInputRef}
           type="file"
-          id="json-file-input"
           accept=".json,application/json"
-          onChange={handleFileChange}
+          multiple
+          onChange={(e) => {
+            if (e.target.files) processJsonFiles(Array.from(e.target.files));
+          }}
           className="hidden"
         />
-        <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-[#0066CC]/10 dark:bg-[#4D94FF]/20 text-[#0066CC] dark:text-[#4D94FF] flex items-center justify-center">
-            <Upload className="w-6 h-6" />
+
+        <div className="w-12 h-12 rounded-xl bg-[#0066CC]/10 dark:bg-[#4D94FF]/20 text-[#0066CC] dark:text-[#4D94FF] flex items-center justify-center mx-auto">
+          <Upload className="w-6 h-6" />
+        </div>
+
+        <div>
+          <p className="text-sm font-bold text-[#1A1A1A] dark:text-white">
+            Haz clic para seleccionar o arrastra aquí tus archivos .json o la carpeta de tu curso
+          </p>
+          <p className="text-xs text-[#666666] dark:text-[#808080] mt-1">
+            Puedes arrastrar múltiples lecciones o seleccionar varios archivos a la vez manteniendo pulsada la tecla Ctrl/Cmd
+          </p>
+        </div>
+
+        {loadedFilesInfo.length > 0 && (
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-800 text-left max-h-40 overflow-y-auto space-y-1">
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+              ✓ {loadedFilesInfo.length} Archivos cargados y listos:
+            </span>
+            {loadedFilesInfo.map((f, idx) => (
+              <div key={idx} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <span className="truncate font-mono">📄 {f.name}</span>
+                <Badge variant="primary" className="text-[9px] py-0 px-1.5">{f.type}</Badge>
+              </div>
+            ))}
           </div>
-          <div>
-            <p className="text-sm font-bold text-[#1A1A1A] dark:text-white">
-              {file ? file.name : 'Haz clic para seleccionar o arrastra tu archivo JSON'}
-            </p>
-            <p className="text-xs text-[#666666] dark:text-[#808080] mt-1">
-              Esquema de lección conforme a la especificación v1.0
-            </p>
-          </div>
-        </label>
+        )}
       </div>
 
       {/* Raw JSON Editor */}
