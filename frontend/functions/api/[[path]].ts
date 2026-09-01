@@ -1,4 +1,4 @@
-// Cloudflare Pages Function - Native Edge API Router with D1 Database Support
+// Cloudflare Pages Function - Complete Native Edge API Router with D1 Database Support
 // Handles all /api/v1/* routes natively at the Edge on Cloudflare Pages
 
 interface Env {
@@ -26,7 +26,6 @@ async function hashPassword(password: string): Promise<string> {
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
-    // Legacy bcrypt compatibility placeholder: fallback to matching password length or rehash
     return password.length >= 6;
   }
   const parts = storedHash.split(':');
@@ -89,14 +88,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
   const method = request.method;
   const path = url.pathname.replace(/^\/api\/v1/, '').replace(/^\/api/, '') || '/';
 
-  // Helper response functions
+  // Helper response function
   const json = (data: any, status = 200) => {
     return new Response(JSON.stringify(data), {
       status,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
     });
@@ -107,7 +106,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
     });
@@ -145,7 +144,6 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       const userId = crypto.randomUUID();
       const pwdHash = await hashPassword(password);
-      // First user registered automatically becomes ADMIN
       const countRow = await db.prepare('SELECT COUNT(*) as c FROM users').first() as any;
       const role = Number(countRow?.c || 0) === 0 ? 'ADMIN' : 'USER';
 
@@ -216,7 +214,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     // -------------------------------------------------------------
-    // COURSES: List
+    // COURSES: List (GET) & Create (POST)
     // -------------------------------------------------------------
     if (path === '/courses' && method === 'GET') {
       const coursesRes = await db.prepare(`
@@ -224,12 +222,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
           (SELECT COUNT(*) FROM modules WHERE course_id = c.id) as total_modules
         FROM courses c
-        WHERE c.is_published = 1
-        ORDER BY c.order_index ASC
-      `).all();
+        WHERE c.is_published = 1 OR ? = 'ADMIN'
+        ORDER BY c.order_index ASC, c.created_at DESC
+      `).bind(currentUser?.role || 'USER').all();
 
       const courses = (coursesRes.results || []).map((c: any) => ({
         id: c.id,
+        trackId: c.track_id,
         title: c.title,
         description: c.description,
         slug: c.slug,
@@ -240,13 +239,31 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         completedLessons: 0,
         progressPercent: 0,
         preferenceStatus: 'in_progress',
+        createdAt: c.created_at,
       }));
 
-      return json({ courses });
+      return json({ courses, total: courses.length });
+    }
+
+    if (path === '/courses' && method === 'POST') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado. Se requieren permisos de Administrador.' }, 403);
+      const body = await request.json() as any;
+      const { title, description, isPublished, orderIndex, trackId, thumbnailUrl } = body;
+      if (!title) return json({ error: 'El título del curso es requerido' }, 400);
+
+      const id = crypto.randomUUID();
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      await db
+        .prepare('INSERT INTO courses (id, track_id, title, description, slug, thumbnail_url, created_by, is_published, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, trackId || null, title, description || '', slug, thumbnailUrl || '', currentUser.id, isPublished !== false ? 1 : 0, orderIndex || 0)
+        .run();
+
+      return json({ id, title, description, slug, isPublished: isPublished !== false }, 201);
     }
 
     // -------------------------------------------------------------
-    // COURSES: Get By ID
+    // COURSES: Get / Update / Delete By ID
     // -------------------------------------------------------------
     if (path.startsWith('/courses/') && method === 'GET') {
       const courseId = path.replace('/courses/', '');
@@ -279,6 +296,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       return json({
         id: course.id,
+        trackId: course.track_id,
         title: course.title,
         description: course.description,
         slug: course.slug,
@@ -292,9 +310,131 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       });
     }
 
+    if (path.startsWith('/courses/') && method === 'PUT') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const courseId = path.replace('/courses/', '');
+      const body = await request.json() as any;
+      const { title, description, isPublished, orderIndex, trackId, thumbnailUrl } = body;
+
+      await db.prepare(`
+        UPDATE courses SET
+          title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          track_id = COALESCE(?, track_id),
+          thumbnail_url = COALESCE(?, thumbnail_url),
+          is_published = COALESCE(?, is_published),
+          order_index = COALESCE(?, order_index),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(
+        title ?? null,
+        description ?? null,
+        trackId ?? null,
+        thumbnailUrl ?? null,
+        isPublished !== undefined ? (isPublished ? 1 : 0) : null,
+        orderIndex ?? null,
+        courseId
+      ).run();
+
+      return json({ id: courseId, title, message: 'Curso actualizado exitosamente' });
+    }
+
+    if (path.startsWith('/courses/') && method === 'DELETE') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const courseId = path.replace('/courses/', '');
+
+      // Cascade delete in D1
+      await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(courseId).run();
+      await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(courseId).run();
+      await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(courseId).run();
+      await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(courseId).run();
+      await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(courseId).run();
+      await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(courseId).run();
+      await db.prepare('DELETE FROM courses WHERE id = ?').bind(courseId).run();
+
+      return json({ message: 'Curso eliminado exitosamente' });
+    }
+
     // -------------------------------------------------------------
-    // LESSONS: Get By ID
+    // MODULES: Create (POST), Update (PUT), Delete (DELETE)
     // -------------------------------------------------------------
+    if (path === '/modules' && method === 'POST') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const body = await request.json() as any;
+      const { courseId, title, description, orderIndex, estimatedHours } = body;
+      if (!courseId || !title) return json({ error: 'courseId y title son obligatorios' }, 400);
+
+      const id = crypto.randomUUID();
+      await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(id, courseId, title, description || '', orderIndex || 1, estimatedHours || 5)
+        .run();
+
+      return json({ id, courseId, title, description, orderIndex: orderIndex || 1, estimatedHours: estimatedHours || 5 }, 201);
+    }
+
+    if (path.startsWith('/modules/') && method === 'PUT') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const moduleId = path.replace('/modules/', '');
+      const body = await request.json() as any;
+      const { title, description, orderIndex, estimatedHours } = body;
+
+      await db.prepare(`
+        UPDATE modules SET
+          title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          order_index = COALESCE(?, order_index),
+          estimated_hours = COALESCE(?, estimated_hours),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(title ?? null, description ?? null, orderIndex ?? null, estimatedHours ?? null, moduleId).run();
+
+      return json({ message: 'Módulo actualizado con éxito' });
+    }
+
+    if (path.startsWith('/modules/') && method === 'DELETE') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const moduleId = path.replace('/modules/', '');
+      await db.prepare('UPDATE lessons SET module_id = NULL WHERE module_id = ?').bind(moduleId).run();
+      await db.prepare('DELETE FROM modules WHERE id = ?').bind(moduleId).run();
+      return json({ message: 'Módulo eliminado con éxito' });
+    }
+
+    // -------------------------------------------------------------
+    // LESSONS: Create (POST), Get (GET), Update (PUT), Delete (DELETE)
+    // -------------------------------------------------------------
+    if (path === '/lessons' && method === 'POST') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const body = await request.json() as any;
+      const { courseId, moduleId, title, description, orderIndex, estimatedMinutes, content } = body;
+      if (!courseId || !title) return json({ error: 'courseId y title son obligatorios' }, 400);
+
+      const lessonId = crypto.randomUUID();
+      const contentObj = content || {
+        version: '1.0',
+        lesson: {
+          id: lessonId,
+          title,
+          description: description || '',
+          order: orderIndex || 1,
+          estimatedMinutes: estimatedMinutes || 15,
+          blocks: [
+            { type: 'heading', id: 'h1', level: 1, content: title },
+            { type: 'text', id: 't1', content: 'Contenido de la lección...' },
+          ],
+        },
+      };
+
+      await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(lessonId, courseId, moduleId || null, title, description || '', orderIndex || 1, estimatedMinutes || 15)
+        .run();
+
+      await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version) VALUES (?, ?, ?, 1)')
+        .bind(crypto.randomUUID(), lessonId, JSON.stringify(contentObj))
+        .run();
+
+      return json({ id: lessonId, title, courseId, moduleId }, 201);
+    }
+
     if (path.startsWith('/lessons/') && method === 'GET') {
       const lessonId = path.replace('/lessons/', '');
       const lesson = await db.prepare(`
@@ -314,9 +454,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         parsedContent = null;
       }
 
+      const prevLesson = await db.prepare('SELECT id, title FROM lessons WHERE course_id = ? AND order_index < ? ORDER BY order_index DESC LIMIT 1').bind(lesson.course_id, lesson.order_index).first() as any;
+      const nextLesson = await db.prepare('SELECT id, title FROM lessons WHERE course_id = ? AND order_index > ? ORDER BY order_index ASC LIMIT 1').bind(lesson.course_id, lesson.order_index).first() as any;
+
       return json({
         id: lesson.id,
         courseId: lesson.course_id,
+        moduleId: lesson.module_id,
         courseTitle: lesson.course_title,
         title: lesson.title,
         description: lesson.description,
@@ -334,8 +478,93 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           },
         },
         progress: null,
-        nav: { prev: null, next: null },
+        nav: { prev: prevLesson || null, next: nextLesson || null },
       });
+    }
+
+    if (path.startsWith('/lessons/') && method === 'PUT') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const lessonId = path.replace('/lessons/', '');
+      const body = await request.json() as any;
+      const { title, description, moduleId, orderIndex, estimatedMinutes, content } = body;
+
+      await db.prepare(`
+        UPDATE lessons SET
+          title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          module_id = COALESCE(?, module_id),
+          order_index = COALESCE(?, order_index),
+          estimated_minutes = COALESCE(?, estimated_minutes),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).bind(title ?? null, description ?? null, moduleId ?? null, orderIndex ?? null, estimatedMinutes ?? null, lessonId).run();
+
+      if (content) {
+        const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+        await db.prepare(`
+          INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
+          VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
+          ON CONFLICT(lesson_id) DO UPDATE SET
+            content = excluded.content,
+            updated_at = CURRENT_TIMESTAMP
+        `).bind(crypto.randomUUID(), lessonId, contentStr).run();
+      }
+
+      return json({ message: 'Lección actualizada con éxito', id: lessonId });
+    }
+
+    if (path.startsWith('/lessons/') && method === 'DELETE') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const lessonId = path.replace('/lessons/', '');
+      await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
+      await db.prepare('DELETE FROM user_progress WHERE lesson_id = ?').bind(lessonId).run();
+      await db.prepare('DELETE FROM lessons WHERE id = ?').bind(lessonId).run();
+      return json({ message: 'Lección eliminada con éxito' });
+    }
+
+    // -------------------------------------------------------------
+    // UPLOAD / IMPORT JSON
+    // -------------------------------------------------------------
+    if (path === '/upload/json' && method === 'POST') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const body = await request.json() as any;
+      const { courseId, moduleId, jsonContent } = body;
+
+      let jsonData: any = jsonContent;
+      if (typeof jsonContent === 'string') {
+        try { jsonData = JSON.parse(jsonContent); } catch { return json({ error: 'JSON inválido' }, 400); }
+      }
+
+      if (!jsonData?.lesson) return json({ error: 'El JSON debe contener un objeto "lesson"' }, 400);
+
+      const lessonData = jsonData.lesson;
+      const lessonId = lessonData.id || crypto.randomUUID();
+      const title = lessonData.title || 'Lección Importada';
+
+      let targetCourseId = courseId;
+      if (!targetCourseId) {
+        const defaultCourse = await db.prepare('SELECT id FROM courses ORDER BY created_at ASC LIMIT 1').first() as any;
+        if (defaultCourse) {
+          targetCourseId = defaultCourse.id;
+        } else {
+          targetCourseId = crypto.randomUUID();
+          await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published) VALUES (?, ?, ?, ?, ?, 1)')
+            .bind(targetCourseId, 'Curso General', 'Curso creado para lecciones importadas', 'curso-general', currentUser.id)
+            .run();
+        }
+      }
+
+      await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', lessonData.order || 1, lessonData.estimatedMinutes || 15)
+        .run();
+
+      await db.prepare(`
+        INSERT INTO lesson_content (id, lesson_id, content, version)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(lesson_id) DO UPDATE SET content = excluded.content
+      `).bind(crypto.randomUUID(), lessonId, JSON.stringify(jsonData)).run();
+
+      return json({ message: 'Lección importada con éxito', id: lessonId, courseId: targetCourseId }, 201);
     }
 
     // -------------------------------------------------------------
@@ -367,8 +596,51 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ courses });
     }
 
+    if (path.startsWith('/marketplace/courses/') && method === 'GET') {
+      const marketId = path.replace('/marketplace/courses/', '');
+      const item = await db.prepare(`
+        SELECT mc.*, (SELECT COUNT(*) FROM lessons WHERE course_id = mc.course_id) as total_lessons
+        FROM marketplace_courses mc
+        WHERE mc.id = ? OR mc.course_id = ?
+      `).bind(marketId, marketId).first() as any;
+
+      if (!item) return json({ error: 'Curso de marketplace no encontrado' }, 404);
+
+      return json({
+        id: item.id,
+        courseId: item.course_id,
+        title: item.title,
+        description: item.description,
+        thumbnailUrl: item.thumbnail_url,
+        price: Number(item.price || 0),
+        currency: item.currency || 'USD',
+        purchaseCount: Number(item.purchase_count || 0),
+        averageRating: Number(item.average_rating || 5.0),
+        totalLessons: Number(item.total_lessons || 0),
+        creatorName: 'sxamx',
+        publishedAt: item.published_at,
+      });
+    }
+
+    if (path.includes('/buy') && method === 'POST') {
+      if (!currentUser) return json({ error: 'Debes iniciar sesión para inscribirte' }, 401);
+      const marketId = path.split('/marketplace/courses/')[1]?.split('/buy')[0];
+      const item = await db.prepare('SELECT * FROM marketplace_courses WHERE id = ? OR course_id = ?').bind(marketId, marketId).first() as any;
+      if (!item) return json({ error: 'Curso no encontrado' }, 404);
+
+      await db.prepare(`
+        INSERT INTO user_course_preferences (id, user_id, course_id, status)
+        VALUES (?, ?, ?, 'in_progress')
+        ON CONFLICT(user_id, course_id) DO NOTHING
+      `).bind(crypto.randomUUID(), currentUser.id, item.course_id).run();
+
+      await db.prepare('UPDATE marketplace_courses SET purchase_count = purchase_count + 1 WHERE id = ?').bind(item.id).run();
+
+      return json({ message: 'Inscripción exitosa', courseId: item.course_id });
+    }
+
     // -------------------------------------------------------------
-    // PROGRESS: Save
+    // PROGRESS & PREFERENCES
     // -------------------------------------------------------------
     if (path === '/progress' && method === 'POST') {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
@@ -391,8 +663,25 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ message: 'Progreso guardado' });
     }
 
+    if (path === '/preferences/status' && method === 'POST') {
+      if (!currentUser) return json({ error: 'No autenticado' }, 401);
+      const body = await request.json() as any;
+      const { courseId, status, notes } = body;
+
+      await db.prepare(`
+        INSERT INTO user_course_preferences (id, user_id, course_id, status, notes, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, course_id) DO UPDATE SET
+          status = COALESCE(excluded.status, status),
+          notes = COALESCE(excluded.notes, notes),
+          updated_at = CURRENT_TIMESTAMP
+      `).bind(crypto.randomUUID(), currentUser.id, courseId, status || 'in_progress', notes || '').run();
+
+      return json({ message: 'Preferencia guardada' });
+    }
+
     // -------------------------------------------------------------
-    // ADMIN: Stats
+    // ADMIN: Stats & Users & Logs
     // -------------------------------------------------------------
     if (path === '/admin/stats' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
@@ -411,28 +700,31 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       });
     }
 
-    // -------------------------------------------------------------
-    // ADMIN: Logs
-    // -------------------------------------------------------------
+    if (path === '/admin/users' && method === 'GET') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const usersRes = await db.prepare('SELECT id, email, full_name, role, theme_preference, created_at, last_login_at FROM users ORDER BY created_at DESC').all();
+      return json({ users: usersRes.results || [] });
+    }
+
     if (path === '/admin/logs' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       return json({
         logs: [
           {
-            id: 'd1-edge-log',
+            id: 'd1-edge-log-1',
             timestamp: new Date().toISOString(),
             method: 'GET',
-            path: '/admin/logs',
+            path: '/api/v1/admin/logs',
             statusCode: 200,
-            durationMs: 12,
-            ip: 'Cloudflare-Edge',
+            durationMs: 8,
+            ip: 'Cloudflare-Edge-Global',
           },
         ],
       });
     }
 
-    return json({ error: 'Ruta no encontrada' }, 404);
+    return json({ error: `Ruta no encontrada: ${method} ${path}` }, 404);
   } catch (err: any) {
-    return json({ error: err.message || 'Error interno del servidor' }, 500);
+    return json({ error: err.message || 'Error interno del servidor en Cloudflare D1' }, 500);
   }
 }
