@@ -2,14 +2,15 @@ import { getDb } from './db';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 
 const db = getDb();
 
 console.log('🌱 Starting comprehensive database seeding v2.0 (with Database Modeler)...');
 
-// 1. Users
-const adminPasswordHash = '$2b$10$wO8XJk.u6B2tT4d7W2i4ue6O2Y8K3wK.u6B2tT4d7W2i4ue6O2Y8K'; // Admin123456!
-const userPasswordHash = '$2b$10$wO8XJk.u6B2tT4d7W2i4ue6O2Y8K3wK.u6B2tT4d7W2i4ue6O2Y8K';
+// 1. Users (Generating dynamic, valid bcrypt hashes)
+const adminPasswordHash = bcrypt.hashSync('Admin123456!', 10);
+const studentPasswordHash = bcrypt.hashSync('Student123456!', 10);
 
 let adminUser = db.prepare("SELECT id FROM users WHERE email = 'admin@studyplatform.com'").get() as any;
 if (!adminUser) {
@@ -19,17 +20,21 @@ if (!adminUser) {
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(adminId, 'admin@studyplatform.com', adminPasswordHash, 'ADMIN', 'Administrador Principal', 'system');
   adminUser = { id: adminId };
+} else {
+  db.prepare("UPDATE users SET password_hash = ?, role = 'ADMIN' WHERE email = 'admin@studyplatform.com'").run(adminPasswordHash);
 }
 const adminId = adminUser.id;
 
-let studentUser = db.prepare("SELECT id FROM users WHERE email = 'student@studyplatform.com'").get() as any;
+let studentUser = db.prepare("SELECT id FROM users WHERE email IN ('estudiante@studyplatform.com', 'student@studyplatform.com')").get() as any;
 if (!studentUser) {
   const studentId = 'student-user-0001';
   db.prepare(`
     INSERT INTO users (id, email, password_hash, role, full_name, theme_preference)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(studentId, 'student@studyplatform.com', userPasswordHash, 'USER', 'Estudiante Demo', 'dark');
+  `).run(studentId, 'estudiante@studyplatform.com', studentPasswordHash, 'USER', 'Estudiante Demo', 'dark');
   studentUser = { id: studentId };
+} else {
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(studentPasswordHash, studentUser.id);
 }
 const studentId = studentUser.id;
 
@@ -407,10 +412,10 @@ for (const m of marketplaceListings) {
 // 8. User course preference (En progreso para el estudiante)
 db.prepare(`
   INSERT INTO user_course_preferences (id, user_id, course_id, status, notes)
-  VALUES ('pref-002', ?, 'course-databases-er', 'in_progress', 'Practicar relaciones 1:N y tablas intermedias en el lienzo')
+  VALUES (?, ?, 'course-databases-er', 'in_progress', 'Practicar relaciones 1:N y tablas intermedias en el lienzo')
   ON CONFLICT(user_id, course_id) DO UPDATE SET
     status = excluded.status,
     notes = excluded.notes
-`).run(studentId);
+`).run(crypto.randomUUID(), studentId);
 
 console.log('🎉 Full database seeding completed successfully!');

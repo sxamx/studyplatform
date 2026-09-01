@@ -83,7 +83,7 @@ export const QuestionChoiceBlock: React.FC<QuestionChoiceBlockProps> = ({
               className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${stateStyle} disabled:cursor-default`}
             >
               <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-center text-xs font-bold text-[#1A1A1A] dark:text-white shadow-xs">
+                <span className="w-7 h-7 rounded-lg bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-center text-xs font-bold text-[#1A1A1A] dark:text-white shadow-xs shrink-0 aspect-square">
                   {String.fromCharCode(65 + idx)}
                 </span>
                 <span className="text-sm font-medium text-[#1A1A1A] dark:text-[#E0E0E0]">

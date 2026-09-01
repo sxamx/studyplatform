@@ -124,6 +124,7 @@ export const EntityAttributeSchema = z.object({
 export const EntityDefinitionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  notes: z.string().optional(),
   position: z.object({
     x: z.number(),
     y: z.number(),

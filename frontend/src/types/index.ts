@@ -114,6 +114,7 @@ export interface EntityAttribute {
 export interface EntityDefinition {
   id: string;
   name: string;
+  notes?: string;
   position?: { x: number; y: number };
   attributes: EntityAttribute[];
 }

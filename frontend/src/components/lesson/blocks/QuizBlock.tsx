@@ -117,7 +117,7 @@ export const QuizBlock: React.FC<QuizBlockProps> = ({ block, onQuizComplete }) =
                       : 'border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC]/40 dark:hover:border-[#4D94FF]/40 bg-[#F5F5F5]/40 dark:bg-[#242424]/40'
                   }`}
                 >
-                  <span className="w-7 h-7 rounded-lg bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-center text-xs font-bold text-[#1A1A1A] dark:text-white">
+                  <span className="w-7 h-7 rounded-lg bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-center text-xs font-bold text-[#1A1A1A] dark:text-white shrink-0 aspect-square">
                     {String.fromCharCode(65 + idx)}
                   </span>
                   <span className="text-sm font-medium text-[#1A1A1A] dark:text-[#E0E0E0]">

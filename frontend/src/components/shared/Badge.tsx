@@ -30,7 +30,7 @@ export const Badge: React.FC<BadgeProps> = ({
   };
 
   return (
-    <span className={twMerge(clsx('inline-flex items-center gap-1 rounded-full uppercase tracking-wider', sizeStyles[size], variantStyles[variant], className))}>
+    <span className={twMerge(clsx('inline-flex items-center gap-1 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0', sizeStyles[size], variantStyles[variant], className))}>
       {children}
     </span>
   );

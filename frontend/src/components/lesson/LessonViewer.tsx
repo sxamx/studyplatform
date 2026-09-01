@@ -61,7 +61,7 @@ export const LessonViewer: React.FC<LessonViewerProps> = ({ lesson }) => {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Top Header & Sticky Progress */}
-      <div className="sticky top-16 z-30 bg-white/95 dark:bg-[#0F0F0F]/95 backdrop-blur-md pb-4 pt-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D] mb-8">
+      <div className="sticky top-16 z-30 -mx-4 px-4 sm:-mx-6 sm:px-6 bg-white/95 dark:bg-[#0F0F0F]/95 backdrop-blur-md pb-4 pt-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D] mb-8">
         <div className="flex items-center justify-between gap-4 mb-2">
           <button
             onClick={() => navigate(`/courses/${lesson.courseId}`)}
