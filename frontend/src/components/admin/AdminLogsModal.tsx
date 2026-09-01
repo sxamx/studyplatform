@@ -70,20 +70,20 @@ export const AdminLogsModal: React.FC<AdminLogsModalProps> = ({ isOpen, onClose 
   const getStatusBadge = (code: number) => {
     if (code >= 500) {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+        <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
           {code} ERROR
         </span>
       );
     }
     if (code >= 400) {
       return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+        <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
           {code} WARN
         </span>
       );
     }
     return (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+      <span className="whitespace-nowrap inline-flex items-center shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
         {code} OK
       </span>
     );
@@ -163,14 +163,14 @@ export const AdminLogsModal: React.FC<AdminLogsModalProps> = ({ isOpen, onClose 
             filteredLogs.map((log) => (
               <div
                 key={log.id}
-                className="p-3 bg-white dark:bg-[#181818] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl flex items-center justify-between gap-3 text-xs font-mono hover:border-[#0066CC] transition-colors"
+                className="p-3 bg-white dark:bg-[#181818] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-xl flex items-center justify-between gap-3 text-xs font-mono hover:border-[#0066CC] transition-colors overflow-x-auto"
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0 shrink-0">
                   {getStatusBadge(log.statusCode)}
-                  <span className="font-bold text-gray-800 dark:text-gray-200 uppercase">
+                  <span className="font-bold text-gray-800 dark:text-gray-200 uppercase shrink-0">
                     {log.method}
                   </span>
-                  <span className="text-gray-600 dark:text-gray-400 truncate max-w-[280px]">
+                  <span className="text-gray-600 dark:text-gray-400 whitespace-nowrap">
                     {log.path}
                   </span>
                 </div>

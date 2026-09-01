@@ -47,14 +47,14 @@ export const CourseDetailPage: React.FC = () => {
       {/* Course Hero Banner */}
       <Card className="p-8 sm:p-10 relative overflow-hidden bg-gradient-to-br from-white to-[#F5F5F5] dark:from-[#1A1A1A] dark:to-[#141414]">
         <div className="max-w-3xl space-y-4">
-          <div className="flex items-center gap-3">
-            <Badge variant="primary">Curso Interactivo</Badge>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Badge variant="primary" className="shrink-0">Curso Interactivo</Badge>
             {hasModules && (
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="shrink-0">
                 <Layers className="w-3 h-3 mr-1 inline" /> {activeCourse.modules?.length} Módulos
               </Badge>
             )}
-            <span className="flex items-center gap-1 text-xs text-[#666666] dark:text-[#B0B0B0]">
+            <span className="flex items-center gap-1 text-xs text-[#666666] dark:text-[#B0B0B0] shrink-0 bg-gray-100 dark:bg-[#202020] px-2.5 py-1 rounded-lg">
               <Clock className="w-3.5 h-3.5" />
               {totalMinutes} min de contenido total
             </span>
