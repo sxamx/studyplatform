@@ -1,5 +1,5 @@
 import React from 'react';
-import { Video, Clock } from 'lucide-react';
+import { Video, Clock, Download, ExternalLink, AlertTriangle } from 'lucide-react';
 import { VideoBlock as IVideoBlock } from '../../../types';
 
 interface VideoBlockProps {
@@ -7,7 +7,22 @@ interface VideoBlockProps {
 }
 
 export const VideoBlock: React.FC<VideoBlockProps> = ({ block }) => {
-  const isEmbeddable = block.url.includes('youtube.com') || block.url.includes('youtu.be') || block.url.includes('vimeo.com');
+  const rawUrl = block.url?.trim() || '';
+  const lowerUrl = rawUrl.toLowerCase();
+
+  // Security check: only allow safe http/https URLs
+  if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://')) {
+    return (
+      <div className="my-5 p-4 rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        <span>Enlace de video bloqueado por seguridad (Protocolo no admitido).</span>
+      </div>
+    );
+  }
+
+  const isYouTube = lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be');
+  const isVimeo = lowerUrl.includes('vimeo.com');
+  const isEmbeddable = isYouTube || isVimeo;
 
   const getEmbedUrl = (url: string) => {
     if (url.includes('youtube.com/watch?v=')) {
@@ -21,34 +36,62 @@ export const VideoBlock: React.FC<VideoBlockProps> = ({ block }) => {
   };
 
   return (
-    <div className="my-6 rounded-xl border border-[#E0E0E0] dark:border-[#2D2D2D] bg-[#F5F5F5] dark:bg-[#1A1A1A] overflow-hidden shadow-sm">
+    <div className="my-6 rounded-2xl border border-[#E0E0E0] dark:border-[#2D2D2D] bg-[#F5F5F5] dark:bg-[#1A1A1A] overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E0E0E0] dark:border-[#2D2D2D]">
         <div className="flex items-center gap-2">
           <Video className="w-4 h-4 text-[#0066CC] dark:text-[#4D94FF]" />
           <span className="text-sm font-semibold text-[#1A1A1A] dark:text-white">
-            {block.title}
+            {block.title || 'Video de la Lección'}
           </span>
         </div>
-        {block.duration && (
-          <span className="flex items-center gap-1 text-xs text-[#666666] dark:text-[#B0B0B0]">
-            <Clock className="w-3.5 h-3.5" />
-            {block.duration}
-          </span>
-        )}
+
+        <div className="flex items-center gap-2">
+          {block.duration && (
+            <span className="flex items-center gap-1 text-xs text-[#666666] dark:text-[#B0B0B0] mr-2">
+              <Clock className="w-3.5 h-3.5" />
+              {block.duration}
+            </span>
+          )}
+
+          {/* Download button for direct video files */}
+          {!isEmbeddable && (
+            <a
+              href={rawUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              title="Descargar video"
+              className="p-1.5 rounded-lg bg-gray-200 dark:bg-[#252525] text-gray-700 dark:text-gray-300 hover:text-[#0066CC] transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </a>
+          )}
+
+          {/* External link button */}
+          <a
+            href={rawUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            title="Abrir video en nueva pestaña"
+            className="p-1.5 rounded-lg bg-gray-200 dark:bg-[#252525] text-gray-700 dark:text-gray-300 hover:text-[#0066CC] transition"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
 
       <div className="relative aspect-video w-full bg-black">
         {isEmbeddable ? (
           <iframe
-            src={getEmbedUrl(block.url)}
-            title={block.title}
+            src={getEmbedUrl(rawUrl)}
+            title={block.title || 'Video'}
             className="w-full h-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         ) : (
           <video
-            src={block.url}
+            src={rawUrl}
             poster={block.thumbnail}
             controls
             className="w-full h-full object-contain"

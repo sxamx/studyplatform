@@ -107,7 +107,7 @@ export const Navbar: React.FC = () => {
             <div className="flex items-center gap-3 pl-2 border-l border-[#E0E0E0] dark:border-[#2D2D2D]">
               <div className="hidden sm:flex flex-col items-end text-right">
                 <span className="text-xs font-semibold text-[#1A1A1A] dark:text-white leading-tight">
-                  {user.fullName || user.email.split('@')[0]}
+                  {user.fullName || (user.email ? user.email.split('@')[0] : 'Estudiante')}
                 </span>
                 <span className="text-[10px] text-[#0066CC] dark:text-[#4D94FF] font-bold uppercase tracking-wider">
                   {user.role}

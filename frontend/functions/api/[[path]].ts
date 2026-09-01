@@ -205,6 +205,17 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     // -------------------------------------------------------------
+    // AUTH: Theme Preference
+    // -------------------------------------------------------------
+    if (path === '/auth/theme' && (method === 'PATCH' || method === 'PUT')) {
+      if (!currentUser) return json({ message: 'Tema actualizado localmente' }, 200);
+      const body = await request.json() as any;
+      const theme = body.themePreference || body.theme || 'light';
+      await db.prepare('UPDATE users SET theme_preference = ? WHERE id = ?').bind(theme, currentUser.id).run();
+      return json({ message: 'Preferencia de tema guardada', themePreference: theme });
+    }
+
+    // -------------------------------------------------------------
     // COURSES: List
     // -------------------------------------------------------------
     if (path === '/courses' && method === 'GET') {

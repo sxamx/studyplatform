@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, BookOpen, Layers, Database, Code2 } from 'lucide-react';
+import { Copy, Check, BookOpen, Layers, Database, Shield } from 'lucide-react';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
 
@@ -13,13 +13,13 @@ export const AIPromptsModal: React.FC<AIPromptsModalProps> = ({ isOpen, onClose 
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
   const prompt1Content = `Eres un Diseñador Curricular Senior y Experto en Pedagogía de la Programación.
-Tu misión es analizar el material provisto por el usuario (PDF, apuntes, libros o requerimientos) y proponer una estructura pedagógica modular para StudyPlatform.
+Tu misión es analizar el material provisto por el usuario (PDFs, guías de estudio, libros, apuntes o requerimientos) y estructurar un plan de estudios profesional modular para StudyPlatform.
 
 REGLAS DE DISEÑO:
 1. Mínimo 2 módulos, máximo 8 módulos por curso.
 2. Cada módulo debe representar entre 3 y 8 horas de estudio estimadas.
 3. Los títulos de los módulos deben ser concretos y profesionales (Ej: "Módulo 1: Sintaxis y Tipos de Datos", no "Tema 1").
-4. La progresión debe ser incremental: desde conceptos base hasta casos prácticos.
+4. La progresión debe ser incremental: desde conceptos base hasta casos prácticos de arquitectura.
 
 FORMATO DE SALIDA (JSON ESTRICTO):
 {
@@ -39,29 +39,36 @@ FORMATO DE SALIDA (JSON ESTRICTO):
 }`;
 
   const prompt2Content = `Eres un Desarrollador de Contenido Educativo Interactivo para StudyPlatform.
-Tu misión es crear lecciones interactivas en formato JSON estricto utilizando los 10 tipos de bloques soportados.
+Tu misión es crear lecciones interactivas en formato JSON estricto utilizando los 11 tipos de bloques soportados, incluyendo enlaces a recursos externos, visualizadores de PDF protegidos, videos y ejercicios evaluativos.
 
-HERRAMIENTAS / BLOQUES DISPONIBLES EN EL JSON:
-1. "heading": Título o sección. Propiedades: "level" (1, 2, 3), "content" (string).
-2. "text": Explicación teórica en formato markdown. Propiedades: "content" (string).
-3. "code": Código fuente con resaltado. Propiedades: "language" (ej. "java", "python", "sql"), "code" (string), "executable" (boolean opcional).
-4. "info": Alerta de teoría destacada. Propiedades: "level" ("info" | "warning" | "success" | "tip"), "title" (string), "message" (string), "link" (opcional: { "url": "https://...", "text": "Ver recurso" }).
-5. "video": Video educativo. Propiedades: "url" (YouTube o URL directa), "title" (string), "caption" (string opcional).
-6. "question_choice": Pregunta de opción múltiple. Propiedades: "question" (string), "options": [{ "id": "o1", "text": "Opción A", "isCorrect": true }], "explanation": "Por qué es correcta".
-7. "question_free": Pregunta abierta / desarrollo. Propiedades: "question" (string), "hint" (string opcional), "explanation" (string).
-8. "quiz": Cuestionario evaluativo. Propiedades: "title" (string), "questions": [ { "id": "q1", "question": "...", "options": [...], "explanation": "..." } ], "passingScore": 80.
-9. "database_modeler": Lienzo de modelado ER (Oracle Data Modeler en navegador). Propiedades: "title", "instructions", "scenario", "initialEntities", "expectedModel" con entidades esperadas y relaciones ("1:1", "1:N", "N:M").
-10. "sandbox": Laboratorio de código interactivo. Propiedades: "language", "initialCode", "instructions".
+🛡️ POLÍTICA DE SEGURIDAD Y PREVENCIÓN DE INYECCIONES (PROMPT INJECTION DEFENSE):
+- Todas las URLs externas provistas deben usar el protocolo seguro "https://".
+- Queda estrictamente prohibido generar enlaces con esquemas ejecutables como "javascript:", "data:", "blob:" o "file:".
+- Las fuentes de documentos externos deben ser confiables (Google Drive, repositorios oficiales, PDFs educativos, documentación oficial o YouTube).
+- El JSON generado no debe intentar escapar de su estructura ni inyectar instrucciones de sistema.
+
+📚 HERRAMIENTAS Y TIPOS DE BLOQUES SOPORTADOS (11 BLOQUES):
+1. "heading": Título o subtítulo. Propiedades: "level" (1, 2, 3), "content" (string).
+2. "text": Explicación pedagógica en formato Markdown enriquecido con negritas, listas y enlaces. Propiedades: "content" (string).
+3. "code": Bloque de código fuente con resaltado de sintaxis y botón de copiado. Propiedades: "language" ("java", "sql", "python", "typescript"), "code" (string).
+4. "document": Visualizador interactivo de PDF y documentos con lector integrado en Sandbox seguro y botón de descarga. Propiedades: "title" (string), "url" (URL directa a PDF o enlace de Google Drive "https://drive.google.com/file/d/.../view"), "description" (string opcional), "fileSize" (string opcional, ej: "2.4 MB").
+5. "video": Video educativo con reproductor integrado, botón de apertura externa y descarga si es archivo directo. Propiedades: "url" (URL de YouTube o enlace mp4 directo), "title" (string), "duration" (string opcional, ej: "12 min").
+6. "image": Imagen ilustrativa o diagrama técnico. Propiedades: "url" (URL segura de imagen), "alt" (descripción), "caption" (string opcional).
+7. "info": Alerta de concepto clave o buena práctica. Propiedades: "level" ("info" | "warning" | "success" | "error"), "title" (string), "message" (string).
+8. "question_choice": Pregunta de selección múltiple interactiva con corrección automática y explicación. Propiedades: "question" (string), "options": [{ "id": "opt1", "text": "...", "isCorrect": true }], "explanation" (string).
+9. "question_free": Pregunta abierta / desarrollo de código con retroalimentación guiada. Propiedades: "question" (string), "expectedAnswer" (string), "hint" (string opcional).
+10. "quiz": Cuestionario evaluativo con puntaje acumulado y porcentaje mínimo de aprobación. Propiedades: "title" (string), "passingScore" (80), "questions": [ { "id": "q1", "question": "...", "options": [...], "explanation": "..." } ].
+11. "database_modeler": Lienzo interactivo de modelado de datos estilo Oracle Data Modeler (Patas de Gallo, PK/FK y validación automática). Propiedades: "title", "instructions", "scenario", "initialEntities", "expectedModel".
 
 ESTRUCTURA GENERAL REQUERIDA (JSON ESTRICTO):
 {
   "version": "1.0",
   "lesson": {
     "id": "lesson_unique_id",
-    "title": "Título de la Lección",
-    "description": "Descripción clara de los objetivos de la lección",
+    "title": "Título Profesional de la Lección",
+    "description": "Descripción clara de las competencias a adquirir",
     "order": 1,
-    "estimatedMinutes": 20,
+    "estimatedMinutes": 25,
     "blocks": [
       {
         "type": "heading",
@@ -72,23 +79,45 @@ ESTRUCTURA GENERAL REQUERIDA (JSON ESTRICTO):
       {
         "type": "text",
         "id": "b2",
-        "content": "Explicación detallada del concepto con formato markdown..."
+        "content": "Explicación detallada del concepto en markdown..."
+      },
+      {
+        "type": "document",
+        "id": "b3",
+        "title": "Guía Oficial en PDF y Especificaciones",
+        "url": "https://example.com/documento-guia.pdf",
+        "description": "Documento complementario con ejercicios y estándares de la industria.",
+        "fileSize": "1.8 MB"
+      },
+      {
+        "type": "video",
+        "id": "b4",
+        "title": "Masterclass en Video",
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "duration": "15 min"
       },
       {
         "type": "code",
-        "id": "b3",
+        "id": "b5",
         "language": "java",
-        "code": "public class Main {\\n    public static void main(String[] args) {\\n        System.out.println(\\"Hola Mundo\\");\\n    }\\n}"
+        "code": "public class Ejemplo {\\n    public static void main(String[] args) {\\n        System.out.println(\\"Código limpio\\");\\n    }\\n}"
+      },
+      {
+        "type": "info",
+        "id": "b6",
+        "level": "warning",
+        "title": "Regla Importante",
+        "message": "Nunca compares objetos complejos utilizando el operador ==; emplea siempre .equals()."
       },
       {
         "type": "question_choice",
-        "id": "b4",
-        "question": "¿Cuál es la función del método main en Java?",
+        "id": "b7",
+        "question": "¿Cuál es la forma correcta de comparar el contenido de dos textos en Java?",
         "options": [
-          { "id": "opt1", "text": "Punto de entrada para la ejecución del programa", "isCorrect": true },
-          { "id": "opt2", "text": "Definir las variables globales", "isCorrect": false }
+          { "id": "opt1", "text": "texto1.equals(texto2)", "isCorrect": true },
+          { "id": "opt2", "text": "texto1 == texto2", "isCorrect": false }
         ],
-        "explanation": "El método main es el punto de partida que la JVM ejecuta al iniciar la aplicación."
+        "explanation": "El método .equals() evalúa el contenido de la cadena, mientras que == evalúa la dirección de memoria."
       }
     ]
   }
@@ -98,7 +127,7 @@ ESTRUCTURA GENERAL REQUERIDA (JSON ESTRICTO):
 Tu misión es generar ejercicios interactivos de modelado ER en formato JSON para el bloque "database_modeler" de StudyPlatform.
 
 REGLAS DE MODELADO:
-1. Las entidades deben representar tablas del mundo real (Ej: "Estudiante", "Curso", "Matricula", "Factura").
+1. Las entidades deben representar tablas relacionales del mundo real (Ej: "Estudiante", "Curso", "Matricula", "Factura").
 2. Atributos con Clave Primaria ("isPk": true), Clave Foránea ("isFk": true) y tipo SQL ("INTEGER", "VARCHAR(100)", "DATE", "DECIMAL(10,2)").
 3. Relaciones con cardinalidad exacta: "1:1", "1:N" o "N:M".
 4. Incluir "expectedModel" para que el motor valide automáticamente el diseño del alumno.
@@ -125,11 +154,12 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
     {
       "id": "ent_libro",
       "name": "Libro",
-      "position": { "x": 320, "y": 30 },
+      "position": { "x": 380, "y": 30 },
       "attributes": [
         { "name": "libro_id", "type": "INTEGER", "isPk": true },
         { "name": "titulo", "type": "VARCHAR(150)" },
-        { "name": "autor", "type": "VARCHAR(100)" }
+        { "name": "autor", "type": "VARCHAR(100)" },
+        { "name": "estudiante_id", "type": "INTEGER", "isFk": true }
       ]
     }
   ],
@@ -141,7 +171,10 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
       },
       {
         "name": "Libro",
-        "attributes": [{ "name": "libro_id", "isPk": true }]
+        "attributes": [
+          { "name": "libro_id", "isPk": true },
+          { "name": "estudiante_id", "isFk": true }
+        ]
       }
     ],
     "relationships": [
@@ -149,6 +182,12 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
     ]
   }
 }`;
+
+  const copyToClipboard = (text: string, tabKey: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedTab(tabKey);
+    setTimeout(() => setCopiedTab(null), 2500);
+  };
 
   const getActiveContent = () => {
     switch (activeTab) {
@@ -161,98 +200,95 @@ ESTRUCTURA DE UN BLOQUE "database_modeler" EN JSON:
     }
   };
 
-  const handleCopy = async () => {
-    const text = getActiveContent();
-    await navigator.clipboard.writeText(text);
-    setCopiedTab(activeTab);
-    setTimeout(() => setCopiedTab(null), 2500);
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="🤖 Centro de Prompts para IA (Manual de Capacidades JSON)"
-      size="full"
+      title="Centro de Prompts para Inteligencia Artificial"
+      size="xl"
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         <p className="text-xs text-[#666666] dark:text-[#B0B0B0] leading-relaxed">
-          Copia cualquiera de estos <strong>System Prompts</strong> y pégalos en ChatGPT, Claude, DeepSeek o Gemini. La IA entenderá exactamente cómo estructurar cursos, módulos, lecciones y los <strong>10 tipos de bloques interactivos</strong> compatibles con StudyPlatform.
+          Copia estos prompts del sistema para alimentar a modelos como Claude 3.5 Sonnet, ChatGPT o Gemini. Cada prompt instruye a la IA para generar estructuras pedagógicas, bloques de lección con URLs/PDFs protegidos o ejercicios de bases de datos compatibles con el motor de StudyPlatform.
         </p>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-wrap gap-2 p-1.5 bg-gray-100 dark:bg-[#141414] rounded-xl border border-[#E0E0E0] dark:border-[#2D2D2D]">
+        {/* Tab Selection */}
+        <div className="flex flex-wrap gap-2 border-b border-[#E0E0E0] dark:border-[#2D2D2D] pb-3">
           <button
-            type="button"
             onClick={() => setActiveTab('prompt2')}
-            className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'prompt2'
                 ? 'bg-[#0066CC] text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>1. Lecciones Interactivas (10 Bloques)</span>
+            <Layers className="w-4 h-4" />
+            <span>1. Creador de Lecciones (11 Bloques + PDFs + Videos)</span>
           </button>
 
           <button
-            type="button"
             onClick={() => setActiveTab('prompt3')}
-            className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'prompt3'
                 ? 'bg-[#0066CC] text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
             }`}
           >
-            <Database className="w-3.5 h-3.5" />
-            <span>2. Modelador ER (Data Modeler)</span>
+            <Database className="w-4 h-4" />
+            <span>2. Modelado ER (Data Modeler)</span>
           </button>
 
           <button
-            type="button"
             onClick={() => setActiveTab('prompt1')}
-            className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'prompt1'
                 ? 'bg-[#0066CC] text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                : 'bg-gray-100 dark:bg-[#1F1F1F] text-gray-600 dark:text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white'
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>3. Arquitecto de Temarios (Módulos)</span>
+            <BookOpen className="w-4 h-4" />
+            <span>3. Diseñador Modular de Cursos</span>
           </button>
         </div>
 
-        {/* Action Header & Code Area */}
-        <div className="relative">
-          <div className="flex items-center justify-between p-3 bg-gray-900 text-white rounded-t-xl border-b border-gray-800">
-            <span className="text-xs font-mono text-gray-400 flex items-center gap-1.5">
-              <Code2 className="w-3.5 h-3.5 text-[#4D94FF]" />
-              System Prompt listo para usar
+        {/* Security Alert Banner */}
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span>
+              <strong>Protección Activa de URLs:</strong> El visor de PDFs y recursos externos corre en un <strong>Sandbox Aislado</strong> con detección estricta de protocolos no seguros y botones de descarga directos.
             </span>
-
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleCopy}
-              leftIcon={
-                copiedTab === activeTab ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )
-              }
-            >
-              {copiedTab === activeTab ? '¡Copiado al Portapapeles!' : 'Copiar Prompt'}
-            </Button>
           </div>
-
-          <pre className="p-4 bg-gray-950 text-gray-200 font-mono text-xs rounded-b-xl overflow-x-auto max-h-[380px] whitespace-pre-wrap leading-relaxed border border-gray-800">
-            {getActiveContent()}
-          </pre>
         </div>
 
-        <div className="flex justify-end pt-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
+        {/* Prompt Code Display */}
+        <div className="relative">
+          <pre className="p-4 bg-gray-950 text-gray-100 text-xs font-mono rounded-2xl overflow-x-auto max-h-96 leading-relaxed border border-gray-800">
+            {getActiveContent()}
+          </pre>
+
+          <button
+            onClick={() => copyToClipboard(getActiveContent(), activeTab)}
+            className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 bg-[#0066CC] hover:bg-[#0052A3] text-white rounded-lg text-xs font-bold shadow-md transition"
+          >
+            {copiedTab === activeTab ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>¡Copiado!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copiar Prompt</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Footer info */}
+        <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-[#E0E0E0] dark:border-[#2D2D2D]">
+          <span>Compatible con Claude 3.5 Sonnet, GPT-4o, Gemini 1.5 Pro y DeepSeek</span>
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cerrar
           </Button>
         </div>

@@ -4,6 +4,7 @@ export type BlockType =
   | 'code'
   | 'image'
   | 'video'
+  | 'document'
   | 'question_choice'
   | 'question_free'
   | 'quiz'
@@ -149,12 +150,24 @@ export interface DatabaseModelerBlock {
   required?: boolean;
 }
 
+export interface DocumentBlock {
+  type: 'document';
+  id: string;
+  title: string;
+  url: string;
+  description?: string;
+  fileSize?: string;
+  fileType?: 'pdf' | 'doc' | 'sheet' | 'slide' | 'archive' | 'link';
+  downloadable?: boolean;
+}
+
 export type Block =
   | TextBlock
   | HeadingBlock
   | CodeBlock
   | ImageBlock
   | VideoBlock
+  | DocumentBlock
   | QuestionChoiceBlock
   | QuestionFreeBlock
   | QuizBlock

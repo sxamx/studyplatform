@@ -194,6 +194,16 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
           message: 'Recuerda siempre indentar tu código correctamente para mejorar su legibilidad.',
         };
         break;
+      case 'document':
+        newBlock = {
+          type: 'document',
+          id,
+          title: 'Guía de Estudio en PDF',
+          url: 'https://example.com/documento.pdf',
+          description: 'Documentación de apoyo para esta lección.',
+          downloadable: true,
+        };
+        break;
       case 'database_modeler':
         newBlock = {
           type: 'database_modeler',
@@ -362,6 +372,12 @@ export const VisualLessonEditor: React.FC<VisualLessonEditorProps> = ({
                     className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-[#1A1A1A] dark:text-white"
                   >
                     <span>🎥</span> Video Embebido
+                  </button>
+                  <button
+                    onClick={() => handleAddBlock('document')}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2 text-[#1A1A1A] dark:text-white"
+                  >
+                    <span>📄</span> Documento / PDF
                   </button>
                   <button
                     onClick={() => handleAddBlock('info')}

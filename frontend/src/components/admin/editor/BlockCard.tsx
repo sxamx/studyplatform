@@ -5,6 +5,7 @@ import {
   Code,
   Image as ImageIcon,
   Video,
+  FileText,
   HelpCircle,
   Edit3,
   ListChecks,
@@ -37,6 +38,8 @@ const getBlockTypeMeta = (type: BlockType) => {
       return { label: 'Texto', icon: Type, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/40' };
     case 'code':
       return { label: 'Código', icon: Code, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40' };
+    case 'document':
+      return { label: 'Documento / PDF', icon: FileText, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/40' };
     case 'image':
       return { label: 'Imagen', icon: ImageIcon, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-950/40' };
     case 'video':
@@ -51,6 +54,8 @@ const getBlockTypeMeta = (type: BlockType) => {
       return { label: 'Alerta / Nota', icon: AlertCircle, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40' };
     case 'database_modeler':
       return { label: 'Lienzo ER (Data Modeler)', icon: Database, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/40' };
+    default:
+      return { label: 'Bloque', icon: Type, color: 'text-gray-600', bg: 'bg-gray-50' };
   }
 };
 
@@ -83,16 +88,16 @@ export const BlockCard: React.FC<BlockCardProps> = ({
         );
       case 'code':
         return (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" size="sm">
-                {block.language || 'text'}
-              </Badge>
-              {block.copyable && <span className="text-[10px] text-gray-400">Copiable</span>}
-            </div>
-            <pre className="text-xs font-mono bg-gray-100 dark:bg-[#1A1A1A] p-2 rounded line-clamp-2 text-gray-700 dark:text-gray-300">
-              {block.code}
-            </pre>
+          <div className="text-xs font-mono bg-gray-50 dark:bg-black/40 p-2 rounded border border-[#E0E0E0] dark:border-[#2D2D2D] line-clamp-2 text-[#1A1A1A] dark:text-gray-300">
+            <span className="text-[10px] text-emerald-600 font-bold uppercase mr-2">[{block.language}]</span>
+            {block.code}
+          </div>
+        );
+      case 'document':
+        return (
+          <div className="text-xs space-y-1">
+            <p className="font-semibold text-[#1A1A1A] dark:text-white">📄 {block.title || 'Documento / PDF'}</p>
+            <p className="text-[11px] text-gray-400 font-mono truncate">{block.url}</p>
           </div>
         );
       case 'image':
@@ -174,38 +179,40 @@ export const BlockCard: React.FC<BlockCardProps> = ({
         </div>
       </div>
 
+      {/* Action Controls */}
       <div className="flex items-center gap-1 shrink-0">
         <button
-          type="button"
-          disabled={index === 0}
           onClick={() => onMoveUp(index)}
-          className="p-1.5 text-gray-500 hover:text-[#0066CC] dark:hover:text-[#4D94FF] disabled:opacity-30 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          disabled={index === 0}
+          className="p-1.5 text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white disabled:opacity-30 rounded hover:bg-gray-100 dark:hover:bg-[#252525] transition"
           title="Mover arriba"
         >
           <ArrowUp className="w-4 h-4" />
         </button>
+
         <button
-          type="button"
-          disabled={index === totalBlocks - 1}
           onClick={() => onMoveDown(index)}
-          className="p-1.5 text-gray-500 hover:text-[#0066CC] dark:hover:text-[#4D94FF] disabled:opacity-30 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          disabled={index === totalBlocks - 1}
+          className="p-1.5 text-gray-400 hover:text-[#1A1A1A] dark:hover:text-white disabled:opacity-30 rounded hover:bg-gray-100 dark:hover:bg-[#252525] transition"
           title="Mover abajo"
         >
           <ArrowDown className="w-4 h-4" />
         </button>
-        <div className="w-px h-5 bg-gray-200 dark:bg-gray-800 mx-1" />
+
+        <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-800 mx-1" />
+
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
           onClick={() => onEdit(block, index)}
           leftIcon={<Edit2 className="w-3.5 h-3.5" />}
         >
           Editar
         </Button>
+
         <button
-          type="button"
           onClick={() => onDelete(index)}
-          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded transition"
+          className="p-1.5 text-red-400 hover:text-red-600 rounded hover:bg-red-50 dark:hover:bg-red-950/40 transition"
           title="Eliminar bloque"
         >
           <Trash2 className="w-4 h-4" />

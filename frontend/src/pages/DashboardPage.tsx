@@ -182,7 +182,7 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            ¡Hola, {user.fullName || user.email.split('@')[0] || 'Estudiante'}! 👋
+            ¡Hola, {user.fullName || (user.email ? user.email.split('@')[0] : 'Estudiante')}! 👋
           </h1>
 
           <p className="text-sm sm:text-base text-white/85 leading-relaxed">

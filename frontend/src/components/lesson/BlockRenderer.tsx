@@ -6,6 +6,7 @@ import { HeadingBlock } from './blocks/HeadingBlock';
 import { CodeBlock } from './blocks/CodeBlock';
 import { ImageBlock } from './blocks/ImageBlock';
 import { VideoBlock } from './blocks/VideoBlock';
+import { DocumentBlock } from './blocks/DocumentBlock';
 import { QuestionChoiceBlock } from './blocks/QuestionChoiceBlock';
 import { QuestionFreeBlock } from './blocks/QuestionFreeBlock';
 import { QuizBlock } from './blocks/QuizBlock';
@@ -45,6 +46,8 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
         return <ImageBlock block={block} />;
       case 'video':
         return <VideoBlock block={block} />;
+      case 'document':
+        return <DocumentBlock block={block} />;
       case 'question_choice':
         return (
           <QuestionChoiceBlock

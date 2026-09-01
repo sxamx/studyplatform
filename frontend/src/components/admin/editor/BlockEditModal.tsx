@@ -173,6 +173,38 @@ export const BlockEditModal: React.FC<BlockEditModalProps> = ({
           </div>
         );
 
+      case 'document':
+        return (
+          <div className="space-y-4">
+            <Input
+              label="Título del Documento / PDF"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="Guía de Referencia en PDF"
+              required
+            />
+            <Input
+              label="URL del Documento o PDF (https://... o Google Drive)"
+              value={formData.url || ''}
+              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+              placeholder="https://ejemplo.com/documento.pdf"
+              required
+            />
+            <Input
+              label="Descripción o Instrucciones (Opcional)"
+              value={formData.description || ''}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Lee este documento antes de realizar la evaluación"
+            />
+            <Input
+              label="Tamaño del Archivo (Opcional)"
+              value={formData.fileSize || ''}
+              onChange={(e) => setFormData({ ...formData, fileSize: e.target.value })}
+              placeholder="Ej: 2.5 MB"
+            />
+          </div>
+        );
+
       case 'question_choice':
         const options: ChoiceOption[] = formData.options || [];
 
