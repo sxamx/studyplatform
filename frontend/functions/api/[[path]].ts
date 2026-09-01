@@ -193,6 +193,18 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     } catch (_) {}
 
     // -------------------------------------------------------------
+    // Global User Status & Suspension Check
+    // -------------------------------------------------------------
+    if (currentUser) {
+      const userCheck = await db.prepare('SELECT id, is_suspended, is_active, role FROM users WHERE id = ?').bind(currentUser.id).first() as any;
+      if (!userCheck) {
+        currentUser = null;
+      } else if (userCheck.is_suspended === 1 || userCheck.is_active === 0) {
+        return json({ error: 'Esta cuenta ha sido suspendida por el administrador.', isSuspended: true }, 403);
+      }
+    }
+
+    // -------------------------------------------------------------
     // AUTH: Register
     // -------------------------------------------------------------
     if (path === '/auth/register' && method === 'POST') {
@@ -1188,8 +1200,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const usersRes = await db.prepare(`
         SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference,
           COALESCE(u.is_active, 1) as isActive, COALESCE(u.is_suspended, 0) as isSuspended,
-          u.created_at as createdAt, u.last_login_at as lastLoginAt,
-          (SELECT COUNT(DISTINCT lesson_id) FROM user_progress WHERE user_id = u.id AND completed = 1) as completedLessons
+          u.created_at as createdAt,
+          MAX(
+            COALESCE(u.last_login_at, '1970-01-01'),
+            COALESCE((SELECT MAX(completed_at) FROM user_progress WHERE user_id = u.id), '1970-01-01'),
+            COALESCE((SELECT MAX(updated_at) FROM user_course_preferences WHERE user_id = u.id), '1970-01-01'),
+            COALESCE(u.created_at, '1970-01-01')
+          ) as lastActiveAt,
+          (SELECT COUNT(DISTINCT course_id) FROM user_course_preferences WHERE user_id = u.id) as enrolledCoursesCount,
+          (SELECT COUNT(l.id) FROM lessons l WHERE l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as totalEnrolledLessons,
+          (SELECT COUNT(DISTINCT up.lesson_id) FROM user_progress up JOIN lessons l ON l.id = up.lesson_id WHERE up.user_id = u.id AND up.completed = 1 AND l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as completedLessons
         FROM users u
         ORDER BY u.created_at DESC
       `).all();

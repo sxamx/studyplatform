@@ -82,6 +82,31 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const formatLastActive = (dateStr?: string) => {
+    if (!dateStr || dateStr === '1970-01-01' || dateStr.startsWith('1970')) return 'Sin actividad';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Reciente';
+
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMin / 60);
+
+    const timeString = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (diffMin < 2) return '🟢 En línea ahora';
+    if (diffMin < 60) return `Hace ${diffMin} min (${timeString})`;
+    if (diffHours < 24 && d.getDate() === now.getDate()) return `Hoy a las ${timeString}`;
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (d.getDate() === yesterday.getDate() && d.getMonth() === yesterday.getMonth() && d.getFullYear() === yesterday.getFullYear()) {
+      return `Ayer a las ${timeString}`;
+    }
+
+    return `${d.toLocaleDateString()} (${timeString})`;
+  };
+
   const handleToggleSuspendUser = async (userId: string, isCurrentlySuspended: boolean) => {
     const action = isCurrentlySuspended ? 'reactivar' : 'suspender';
     if (!window.confirm(`¿Deseas ${action} el acceso a esta cuenta de usuario?`)) return;
@@ -410,14 +435,31 @@ export const AdminDashboardPage: React.FC = () => {
                           {isSuspended ? '🔴 Suspendido' : '🟢 Activo'}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-xs font-semibold text-[#666666] dark:text-[#B0B0B0]">
-                        <span className="font-bold text-[#1A1A1A] dark:text-white">
-                          {u.completedLessons ?? 0}
-                        </span>{' '}
-                        {(u.completedLessons ?? 0) === 1 ? 'lección' : 'lecciones'}
+                      <td className="px-6 py-4">
+                        {Number(u.enrolledCoursesCount || 0) === 0 ? (
+                          <div className="text-xs text-gray-400 italic">
+                            0 cursos inscritos
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-center gap-1.5 font-bold text-[#1A1A1A] dark:text-white text-xs">
+                              <span className="text-[#0066CC] dark:text-[#4D94FF]">{u.completedLessons ?? 0}</span>
+                              <span className="text-gray-400">de</span>
+                              <span>{u.totalEnrolledLessons ?? 0} lecciones</span>
+                              <span className="ml-1 text-[11px] px-1.5 py-0.2 rounded font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                                {Number(u.totalEnrolledLessons || 0) > 0 ? Math.round((Number(u.completedLessons || 0) / Number(u.totalEnrolledLessons)) * 100) : 0}%
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[#666666] dark:text-[#808080] mt-0.5">
+                              en {u.enrolledCoursesCount} {Number(u.enrolledCoursesCount) === 1 ? 'curso inscrito' : 'cursos inscritos'}
+                            </div>
+                          </div>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-xs text-[#666666] dark:text-[#808080]">
-                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Reciente'}
+                      <td className="px-6 py-4 text-xs">
+                        <div className="font-medium text-[#1A1A1A] dark:text-white">
+                          {formatLastActive(u.lastActiveAt || u.lastLoginAt || u.createdAt)}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         {isAdmin ? (
