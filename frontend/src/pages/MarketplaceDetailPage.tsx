@@ -80,11 +80,26 @@ export const MarketplaceDetailPage: React.FC = () => {
     }
   };
 
-  if (isLoading || !course) {
+  if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center space-y-3">
         <div className="w-8 h-8 border-3 border-[#0066CC] border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="text-xs text-gray-500 font-semibold">Cargando detalles del curso...</p>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <BookOpen className="w-12 h-12 text-gray-400 mx-auto" />
+        <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white">Curso no encontrado</h2>
+        <p className="text-xs text-gray-500">
+          No pudimos localizar este curso en el Marketplace o ha sido retirado.
+        </p>
+        <Button variant="primary" size="sm" onClick={() => navigate('/marketplace')}>
+          Volver al Catálogo
+        </Button>
       </div>
     );
   }

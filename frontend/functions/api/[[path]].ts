@@ -611,12 +611,43 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path.startsWith('/marketplace/courses/') && method === 'GET') {
       const marketId = path.replace('/marketplace/courses/', '');
       const item = await db.prepare(`
-        SELECT mc.*, (SELECT COUNT(*) FROM lessons WHERE course_id = mc.course_id) as total_lessons
-        FROM marketplace_courses mc
-        WHERE mc.id = ? OR mc.course_id = ?
+        SELECT 
+          COALESCE(mc.id, c.id) as id,
+          c.id as course_id,
+          c.title,
+          c.description,
+          c.thumbnail_url,
+          COALESCE(mc.price, 0) as price,
+          COALESCE(mc.currency, 'USD') as currency,
+          COALESCE(mc.purchase_count, 0) as purchase_count,
+          COALESCE(mc.average_rating, 5.0) as average_rating,
+          (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as total_lessons,
+          COALESCE(mc.published_at, c.created_at) as published_at
+        FROM courses c
+        LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
+        WHERE c.id = ? OR mc.id = ?
       `).bind(marketId, marketId).first() as any;
 
       if (!item) return json({ error: 'Curso de marketplace no encontrado' }, 404);
+
+      const modulesRes = await db.prepare('SELECT id, title, description, order_index FROM modules WHERE course_id = ? ORDER BY order_index ASC').bind(item.course_id).all();
+      const lessonsRes = await db.prepare('SELECT id, module_id, title, estimated_minutes, order_index FROM lessons WHERE course_id = ? ORDER BY order_index ASC').bind(item.course_id).all();
+
+      const lessons = (lessonsRes.results || []).map((l: any) => ({
+        id: l.id,
+        moduleId: l.module_id,
+        title: l.title,
+        order: Number(l.order_index),
+        estimatedMinutes: Number(l.estimated_minutes || 15),
+      }));
+
+      const modules = (modulesRes.results || []).map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        order: Number(m.order_index),
+        lessons: lessons.filter((l) => l.moduleId === m.id),
+      }));
 
       return json({
         id: item.id,
@@ -631,13 +662,20 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         totalLessons: Number(item.total_lessons || 0),
         creatorName: 'sxamx',
         publishedAt: item.published_at,
+        modules,
+        lessons,
       });
     }
 
     if (path.includes('/buy') && method === 'POST') {
       if (!currentUser) return json({ error: 'Debes iniciar sesión para inscribirte' }, 401);
       const marketId = path.split('/marketplace/courses/')[1]?.split('/buy')[0];
-      const item = await db.prepare('SELECT * FROM marketplace_courses WHERE id = ? OR course_id = ?').bind(marketId, marketId).first() as any;
+      const item = await db.prepare(`
+        SELECT COALESCE(mc.id, c.id) as id, c.id as course_id
+        FROM courses c
+        LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
+        WHERE c.id = ? OR mc.id = ?
+      `).bind(marketId, marketId).first() as any;
       if (!item) return json({ error: 'Curso no encontrado' }, 404);
 
       await db.prepare(`
@@ -646,7 +684,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ON CONFLICT(user_id, course_id) DO NOTHING
       `).bind(crypto.randomUUID(), currentUser.id, item.course_id).run();
 
-      await db.prepare('UPDATE marketplace_courses SET purchase_count = purchase_count + 1 WHERE id = ?').bind(item.id).run();
+      await db.prepare(`
+        UPDATE marketplace_courses SET purchase_count = purchase_count + 1 WHERE id = ? OR course_id = ?
+      `).bind(item.id, item.course_id).run();
 
       return json({ message: 'Inscripción exitosa', courseId: item.course_id });
     }
