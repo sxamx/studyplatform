@@ -343,7 +343,10 @@ export const AdminDashboardPage: React.FC = () => {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 text-xs font-semibold text-[#666666] dark:text-[#B0B0B0]">
-                      {u.completedLessons} lecciones
+                      <span className="font-bold text-[#1A1A1A] dark:text-white">
+                        {u.completedLessons ?? 0}
+                      </span>{' '}
+                      {(u.completedLessons ?? 0) === 1 ? 'lección' : 'lecciones'}
                     </td>
                     <td className="px-6 py-4 text-xs text-[#666666] dark:text-[#808080]">
                       {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Reciente'}

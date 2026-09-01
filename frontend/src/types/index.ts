@@ -274,6 +274,7 @@ export interface MarketplaceCourse {
   creatorName: string;
   publishedAt: string;
   isPurchased?: boolean;
+  isEnrolled?: boolean;
   reviews?: MarketplaceReview[];
 }
 

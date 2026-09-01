@@ -226,21 +226,49 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ORDER BY c.order_index ASC, c.created_at DESC
       `).bind(currentUser?.role || 'USER').all();
 
-      const courses = (coursesRes.results || []).map((c: any) => ({
-        id: c.id,
-        trackId: c.track_id,
-        title: c.title,
-        description: c.description,
-        slug: c.slug,
-        thumbnailUrl: c.thumbnail_url,
-        isPublished: Boolean(c.is_published),
-        totalLessons: Number(c.total_lessons || 0),
-        totalModules: Number(c.total_modules || 0),
-        completedLessons: 0,
-        progressPercent: 0,
-        preferenceStatus: 'in_progress',
-        createdAt: c.created_at,
-      }));
+      let progressMap = new Map<string, number>();
+      let preferenceMap = new Map<string, { status: string; notes: string }>();
+
+      if (currentUser) {
+        const progRes = await db.prepare(`
+          SELECT course_id, COUNT(*) as count 
+          FROM user_progress 
+          WHERE user_id = ? AND completed = 1 
+          GROUP BY course_id
+        `).bind(currentUser.id).all();
+        progressMap = new Map((progRes.results || []).map((r: any) => [r.course_id, Number(r.count)]));
+
+        const prefRes = await db.prepare(`
+          SELECT course_id, status, notes 
+          FROM user_course_preferences 
+          WHERE user_id = ?
+        `).bind(currentUser.id).all();
+        preferenceMap = new Map((prefRes.results || []).map((r: any) => [r.course_id, { status: r.status, notes: r.notes || '' }]));
+      }
+
+      const courses = (coursesRes.results || []).map((c: any) => {
+        const total = Number(c.total_lessons || 0);
+        const completed = progressMap.get(c.id) || 0;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const pref = preferenceMap.get(c.id) || { status: 'in_progress', notes: '' };
+
+        return {
+          id: c.id,
+          trackId: c.track_id,
+          title: c.title,
+          description: c.description,
+          slug: c.slug,
+          thumbnailUrl: c.thumbnail_url,
+          isPublished: Boolean(c.is_published),
+          totalLessons: total,
+          totalModules: Number(c.total_modules || 0),
+          completedLessons: completed,
+          progressPercent: percent,
+          preferenceStatus: pref.status,
+          preferenceNotes: pref.notes,
+          createdAt: c.created_at,
+        };
+      });
 
       return json({ courses, total: courses.length });
     }
@@ -273,6 +301,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const modulesRes = await db.prepare('SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all();
       const lessonsRes = await db.prepare('SELECT id, module_id, title, description, order_index, estimated_minutes FROM lessons WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all();
 
+      let completedLessonIds = new Set<string>();
+      if (currentUser) {
+        const upRes = await db.prepare('SELECT lesson_id FROM user_progress WHERE user_id = ? AND course_id = ? AND completed = 1').bind(currentUser.id, courseId).all();
+        completedLessonIds = new Set((upRes.results || []).map((r: any) => r.lesson_id));
+      }
+
       const lessons = (lessonsRes.results || []).map((l: any) => ({
         id: l.id,
         moduleId: l.module_id,
@@ -280,8 +314,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         description: l.description,
         order: Number(l.order_index),
         estimatedMinutes: Number(l.estimated_minutes || 15),
-        isCompleted: false,
-        score: 0,
+        isCompleted: completedLessonIds.has(l.id),
+        score: completedLessonIds.has(l.id) ? 100 : 0,
       }));
 
       const modules = (modulesRes.results || []).map((m: any) => ({
@@ -294,6 +328,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         lessons: lessons.filter((l) => l.moduleId === m.id),
       }));
 
+      const totalLessons = lessons.length;
+      const completedLessons = lessons.filter((l) => l.isCompleted).length;
+      const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
       return json({
         id: course.id,
         trackId: course.track_id,
@@ -302,9 +340,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         slug: course.slug,
         thumbnailUrl: course.thumbnail_url,
         isPublished: Boolean(course.is_published),
-        totalLessons: lessons.length,
-        completedLessons: 0,
-        progressPercent: 0,
+        totalLessons,
+        completedLessons,
+        progressPercent,
         modules,
         lessons,
       });
@@ -477,7 +515,18 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             blocks: [{ type: 'heading', id: 'h1', level: 1, content: lesson.title }],
           },
         },
-        progress: null,
+        progress: currentUser ? await (async () => {
+          const prog = await db.prepare('SELECT completed, score, answers, completed_at FROM user_progress WHERE user_id = ? AND lesson_id = ?').bind(currentUser.id, lessonId).first() as any;
+          if (!prog) return null;
+          let answers = {};
+          try { answers = prog.answers ? JSON.parse(prog.answers) : {}; } catch {}
+          return {
+            completed: Boolean(prog.completed),
+            score: Number(prog.score || 100),
+            answers,
+            completedAt: prog.completed_at,
+          };
+        })() : null,
         nav: { prev: prevLesson || null, next: nextLesson || null },
       });
     }
@@ -501,12 +550,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       if (content) {
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+        await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
         await db.prepare(`
           INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
           VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
-          ON CONFLICT(lesson_id) DO UPDATE SET
-            content = excluded.content,
-            updated_at = CURRENT_TIMESTAMP
         `).bind(crypto.randomUUID(), lessonId, contentStr).run();
       }
 
@@ -558,10 +605,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', lessonData.order || 1, lessonData.estimatedMinutes || 15)
         .run();
 
+      await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
       await db.prepare(`
-        INSERT INTO lesson_content (id, lesson_id, content, version)
-        VALUES (?, ?, ?, 1)
-        ON CONFLICT(lesson_id) DO UPDATE SET content = excluded.content
+        INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
+        VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
       `).bind(crypto.randomUUID(), lessonId, JSON.stringify(jsonData)).run();
 
       return json({ message: 'Lección importada con éxito', id: lessonId, courseId: targetCourseId }, 201);
@@ -590,6 +637,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ORDER BY c.order_index ASC, c.created_at DESC
       `).all();
 
+      let enrolledCourseIds = new Set<string>();
+      if (currentUser) {
+        const prefRes = await db.prepare('SELECT course_id FROM user_course_preferences WHERE user_id = ?').bind(currentUser.id).all();
+        const progRes = await db.prepare('SELECT DISTINCT course_id FROM user_progress WHERE user_id = ?').bind(currentUser.id).all();
+        enrolledCourseIds = new Set([
+          ...(prefRes.results || []).map((r: any) => r.course_id),
+          ...(progRes.results || []).map((r: any) => r.course_id),
+        ]);
+      }
+
       const courses = (itemsRes.results || []).map((l: any) => ({
         id: l.id,
         courseId: l.course_id,
@@ -603,6 +660,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         totalLessons: Number(l.total_lessons || 0),
         creatorName: 'sxamx',
         publishedAt: l.published_at,
+        isEnrolled: enrolledCourseIds.has(l.course_id),
       }));
 
       return json({ courses });
@@ -649,6 +707,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         lessons: lessons.filter((l) => l.moduleId === m.id),
       }));
 
+      let isPurchased = false;
+      if (currentUser) {
+        const pref = await db.prepare('SELECT id FROM user_course_preferences WHERE user_id = ? AND course_id = ?').bind(currentUser.id, item.course_id).first();
+        isPurchased = Boolean(pref);
+      }
+
       return json({
         id: item.id,
         courseId: item.course_id,
@@ -662,6 +726,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         totalLessons: Number(item.total_lessons || 0),
         creatorName: 'sxamx',
         publishedAt: item.published_at,
+        isPurchased,
         modules,
         lessons,
       });
@@ -702,15 +767,17 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const lesson = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
       if (!lesson) return json({ error: 'Lección no encontrada' }, 404);
 
+      await db.prepare('DELETE FROM user_progress WHERE user_id = ? AND lesson_id = ?').bind(currentUser.id, lessonId).run();
       await db.prepare(`
         INSERT INTO user_progress (id, user_id, lesson_id, course_id, completed, score, answers, completed_at)
         VALUES (?, ?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id, lesson_id) DO UPDATE SET
-          completed = 1,
-          score = excluded.score,
-          answers = excluded.answers,
-          completed_at = CURRENT_TIMESTAMP
       `).bind(crypto.randomUUID(), currentUser.id, lessonId, lesson.course_id, score || 100, JSON.stringify(answers || {})).run();
+
+      await db.prepare(`
+        INSERT INTO user_course_preferences (id, user_id, course_id, status, updated_at)
+        VALUES (?, ?, ?, 'in_progress', CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, course_id) DO NOTHING
+      `).bind(crypto.randomUUID(), currentUser.id, lesson.course_id).run();
 
       return json({ message: 'Progreso guardado' });
     }
@@ -754,7 +821,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
     if (path === '/admin/users' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
-      const usersRes = await db.prepare('SELECT id, email, full_name, role, theme_preference, created_at, last_login_at FROM users ORDER BY created_at DESC').all();
+      const usersRes = await db.prepare(`
+        SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference, u.created_at as createdAt, u.last_login_at as lastLoginAt,
+          (SELECT COUNT(*) FROM user_progress WHERE user_id = u.id AND completed = 1) as completedLessons
+        FROM users u
+        ORDER BY u.created_at DESC
+      `).all();
       return json({ users: usersRes.results || [] });
     }
 

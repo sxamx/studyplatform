@@ -43,6 +43,9 @@ export const MarketplacePage: React.FC = () => {
   const safeCourses = Array.isArray(courses) ? courses : [];
 
   const filteredCourses = safeCourses.filter((c) => {
+    // Si el usuario ya está inscrito en el curso, se oculta del marketplace para evitar duplicidad
+    if (user && c.isEnrolled) return false;
+
     const matchesSearch =
       c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.description.toLowerCase().includes(searchTerm.toLowerCase());
