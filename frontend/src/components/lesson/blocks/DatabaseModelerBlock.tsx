@@ -859,7 +859,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => handleOpenEditEntity(entity)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEditEntity(entity);
+                      }}
                       className="p-1 hover:bg-white/20 rounded transition text-white"
                       title="Editar nombre y notas de la tabla"
                     >
@@ -867,7 +870,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDeleteEntity(entity.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteEntity(entity.id);
+                      }}
                       className="p-1 hover:bg-white/20 rounded transition text-white"
                       title="Eliminar entidad"
                     >
@@ -893,7 +899,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                     >
                       {/* Clickable column to edit */}
                       <div
-                        onClick={() => handleOpenEditAttr(entity.id, attr, idx)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditAttr(entity.id, attr, idx);
+                        }}
                         className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer"
                         title="Haz clic para editar columna"
                       >
@@ -918,7 +927,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleDeleteAttribute(entity.id, idx)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteAttribute(entity.id, idx);
+                          }}
                           className="text-gray-400 hover:text-rose-500 p-0.5"
                           title="Eliminar columna"
                         >
@@ -933,7 +945,10 @@ export const DatabaseModelerBlock: React.FC<DatabaseModelerBlockProps> = ({
                 <div className="p-1.5 border-t border-[#E0E0E0] dark:border-[#2D2D2D] bg-gray-50/50 dark:bg-[#141414] rounded-b-[10px]">
                   <button
                     type="button"
-                    onClick={() => handleOpenAddAttr(entity.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenAddAttr(entity.id);
+                    }}
                     className="w-full py-1 text-[10px] font-bold text-[#0066CC] dark:text-[#4D94FF] hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded flex items-center justify-center gap-1 transition"
                   >
                     <Plus className="w-3 h-3" /> Añadir Columna

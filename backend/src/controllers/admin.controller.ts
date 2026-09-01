@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { getDb } from '../database/db';
 import { AuthRequest } from '../middleware/auth';
+import { getAuditLogs, clearAuditLogs } from '../middleware/auditLogger';
 
 export class AdminController {
   static async getStats(req: AuthRequest, res: Response) {
@@ -58,8 +59,19 @@ export class AdminController {
 
     db.prepare(
       'UPDATE users SET role = COALESCE(?, role), is_active = COALESCE(?, is_active), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(role, isActive !== undefined ? (isActive ? 1 : 0) : null, id);
+    ).run(role ?? null, isActive !== undefined ? (isActive ? 1 : 0) : null, id);
 
     res.status(200).json({ message: 'User updated successfully' });
+  }
+
+  static async getLogs(req: AuthRequest, res: Response) {
+    const logs = getAuditLogs();
+    // Return logs in reverse chronological order
+    res.status(200).json({ logs: logs.slice().reverse() });
+  }
+
+  static async clearLogs(req: AuthRequest, res: Response) {
+    clearAuditLogs();
+    res.status(200).json({ message: 'Logs cleared successfully' });
   }
 }

@@ -12,6 +12,7 @@ import {
   Check,
   FileCode,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { CourseDetail, Module, LessonSummary, LessonJSON } from '../types';
@@ -21,6 +22,7 @@ import { Badge } from '../components/shared/Badge';
 import { Modal } from '../components/shared/Modal';
 import { Input } from '../components/shared/Input';
 import { VisualLessonEditor } from '../components/admin/editor/VisualLessonEditor';
+import { AIPromptsModal } from '../components/admin/AIPromptsModal';
 
 export const CourseCurriculumPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +31,7 @@ export const CourseCurriculumPage: React.FC = () => {
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
 
   // Modals
   // 1. Module Modal (Create / Edit)
@@ -305,14 +308,22 @@ export const CourseCurriculumPage: React.FC = () => {
           <span>Volver al Panel de Admin</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsPromptsModalOpen(true)}
+            leftIcon={<Sparkles className="w-3.5 h-3.5 text-amber-500" />}
+          >
+            Prompts para IA
+          </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={handleCopyFullCourseJson}
             leftIcon={<Copy className="w-3.5 h-3.5" />}
           >
-            Copiar Temario para IA
+            Copiar Temario
           </Button>
           <Button
             variant="primary"
@@ -727,6 +738,12 @@ export const CourseCurriculumPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* AI Prompts Modal */}
+      <AIPromptsModal
+        isOpen={isPromptsModalOpen}
+        onClose={() => setIsPromptsModalOpen(false)}
+      />
     </div>
   );
 };

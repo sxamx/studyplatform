@@ -145,11 +145,11 @@ export class LessonController {
 
         db.prepare(`
           INSERT INTO lesson_content (id, lesson_id, content, version, updated_at)
-          VALUES ((SELECT id FROM lesson_content WHERE lesson_id = ?), ?, ?, 1, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
           ON CONFLICT(lesson_id) DO UPDATE SET
             content = excluded.content,
             updated_at = CURRENT_TIMESTAMP
-        `).run(id, id, JSON.stringify(parsed));
+        `).run(crypto.randomUUID(), id, JSON.stringify(parsed));
       }
     });
 

@@ -9,18 +9,24 @@ interface CourseModalProps {
   isOpen: boolean;
   onClose: () => void;
   courseToEdit?: Course | null;
-  onSaved: () => void;
+  course?: Course | null;
+  onSaved?: () => void;
+  onSuccess?: () => void;
 }
 
 export const CourseModal: React.FC<CourseModalProps> = ({
   isOpen,
   onClose,
   courseToEdit,
+  course,
   onSaved,
+  onSuccess,
 }) => {
-  const [title, setTitle] = useState(courseToEdit?.title || '');
-  const [description, setDescription] = useState(courseToEdit?.description || '');
-  const [isPublished, setIsPublished] = useState(courseToEdit?.isPublished ?? true);
+  const activeCourse = courseToEdit || course;
+  const handleSuccess = onSaved || onSuccess || (() => {});
+  const [title, setTitle] = useState(activeCourse?.title || '');
+  const [description, setDescription] = useState(activeCourse?.description || '');
+  const [isPublished, setIsPublished] = useState(activeCourse?.isPublished ?? true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,7 +66,7 @@ export const CourseModal: React.FC<CourseModalProps> = ({
           body: JSON.stringify({ title, description, isPublished }),
         });
       }
-      onSaved();
+      handleSuccess();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Error al guardar el curso');

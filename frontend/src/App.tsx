@@ -13,6 +13,7 @@ import { CourseWizardPage } from './pages/CourseWizardPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MarketplaceDetailPage } from './pages/MarketplaceDetailPage';
 import { CourseCurriculumPage } from './pages/CourseCurriculumPage';
+import { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
@@ -55,7 +56,8 @@ export const App: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200">
       <Navbar />
       <main className="flex-1">
-        <Routes>
+        <ErrorBoundary>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<DashboardPage />} />
@@ -111,6 +113,7 @@ export const App: React.FC = () => {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );
