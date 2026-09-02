@@ -15,6 +15,8 @@ import { CourseWizardPage } from './pages/CourseWizardPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MarketplaceDetailPage } from './pages/MarketplaceDetailPage';
 import { CourseCurriculumPage } from './pages/CourseCurriculumPage';
+import { CreatorDashboardPage } from './pages/CreatorDashboardPage';
+import { CreatorGuidesPage } from './pages/CreatorGuidesPage';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -28,6 +30,21 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+const CreatorRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isLoading } = useAuthStore();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-[#0066CC] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (!user || (user.role !== 'CREATOR' && user.role !== 'ADMIN')) {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 };
@@ -82,6 +99,22 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="/creator"
+              element={
+                <CreatorRoute>
+                  <CreatorDashboardPage />
+                </CreatorRoute>
+              }
+            />
+            <Route
+              path="/creator/guides"
+              element={
+                <CreatorRoute>
+                  <CreatorGuidesPage />
+                </CreatorRoute>
+              }
+            />
+            <Route
               path="/admin"
               element={
                 <AdminRoute>
@@ -100,17 +133,25 @@ export const App: React.FC = () => {
             <Route
               path="/admin/upload-json"
               element={
-                <AdminRoute>
+                <CreatorRoute>
                   <UploadJSONPage />
-                </AdminRoute>
+                </CreatorRoute>
+              }
+            />
+            <Route
+              path="/admin/upload"
+              element={
+                <CreatorRoute>
+                  <UploadJSONPage />
+                </CreatorRoute>
               }
             />
             <Route
               path="/admin/courses/:id/curriculum"
               element={
-                <AdminRoute>
+                <CreatorRoute>
                   <CourseCurriculumPage />
-                </AdminRoute>
+                </CreatorRoute>
               }
             />
             <Route path="*" element={<Navigate to="/" replace />} />

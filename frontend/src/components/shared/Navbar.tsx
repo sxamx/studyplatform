@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, LogIn } from 'lucide-react';
+import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, LogIn, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
 import { GithubIcon, DiscordIcon } from './SocialIcons';
+import { ApplyCreatorModal } from '../creator/ApplyCreatorModal';
+import { NotificationDropdown } from './NotificationDropdown';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuthStore();
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -62,6 +65,20 @@ export const Navbar: React.FC = () => {
             <span>Marketplace</span>
           </Link>
 
+          {user?.role === 'CREATOR' && (
+            <Link
+              to="/creator"
+              className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                isActive('/creator')
+                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400'
+                  : 'text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span>Panel Creador</span>
+            </Link>
+          )}
+
           {user?.role === 'ADMIN' && (
             <Link
               to="/admin"
@@ -75,10 +92,25 @@ export const Navbar: React.FC = () => {
               <span>Admin Panel</span>
             </Link>
           )}
+
+          {user?.role === 'USER' && (
+            <button
+              onClick={() => setIsApplyModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg text-sm font-medium text-[#666666] hover:text-purple-600 dark:text-[#B0B0B0] dark:hover:text-purple-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+              <span>Ser Creador</span>
+            </button>
+          )}
         </nav>
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {/* Notifications for Admin and Creators ONLY (Zero interruption for students) */}
+          {user && (user.role === 'ADMIN' || user.role === 'CREATOR') && (
+            <NotificationDropdown />
+          )}
+
           {/* Social Links (Visible on desktop/tablet to prevent mobile overflow) */}
           <div className="hidden sm:flex items-center gap-1">
             <a
@@ -146,6 +178,12 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Apply Creator Modal */}
+      <ApplyCreatorModal
+        isOpen={isApplyModalOpen}
+        onClose={() => setIsApplyModalOpen(false)}
+      />
     </header>
   );
 };

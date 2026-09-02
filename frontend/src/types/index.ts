@@ -294,8 +294,59 @@ export interface User {
   id: string;
   email: string;
   fullName?: string;
-  role: 'ADMIN' | 'USER';
+  role: 'ADMIN' | 'CREATOR' | 'USER';
   themePreference: 'light' | 'dark' | 'system';
+  canUseAi?: boolean;
+  aiDailyLimit?: number;
+}
+
+export interface CourseAIMessage {
+  id: string;
+  courseId: string;
+  userId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface AIQuota {
+  canUseAi: boolean;
+  dailyLimit: number;
+  usedToday: number;
+  remaining: number;
+}
+
+export interface CreatorApplication {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  userFullName?: string;
+  bio: string;
+  portfolioUrl?: string;
+  motivation: string;
+  status: 'pending' | 'approved' | 'rejected';
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  messages?: ApplicationMessage[];
+}
+
+export interface ApplicationMessage {
+  id: string;
+  applicationId: string;
+  senderId: string;
+  senderName?: string;
+  senderRole?: 'ADMIN' | 'CREATOR' | 'USER';
+  message: string;
+  createdAt: string;
+}
+
+export interface CreatorStats {
+  totalCourses: number;
+  totalLessons: number;
+  totalStudents: number;
+  averageCompletionRate: number;
+  totalCompletions: number;
 }
 
 export interface Module {
@@ -320,6 +371,50 @@ export interface LessonSummary {
   score: number;
 }
 
+export type ApprovalStatus = 'draft' | 'pending_review' | 'pending_update' | 'approved' | 'rejected';
+
+export interface CourseReview {
+  id: string;
+  courseId: string;
+  courseTitle?: string;
+  creatorId: string;
+  creatorName?: string;
+  creatorEmail?: string;
+  reviewType: 'new_course' | 'course_update';
+  status: 'pending' | 'approved' | 'rejected';
+  proposedData: CourseSnapshot;
+  currentData?: CourseSnapshot | null;
+  adminFeedback?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CourseSnapshot {
+  course: {
+    id: string;
+    title: string;
+    description: string;
+    thumbnailUrl?: string;
+    sequentialUnlock?: boolean;
+  };
+  modules: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    order: number;
+  }>;
+  lessons: Array<{
+    id: string;
+    moduleId?: string | null;
+    title: string;
+    description?: string;
+    order: number;
+    estimatedMinutes?: number;
+    blocksCount?: number;
+    blocks?: any[];
+  }>;
+}
+
 export interface Course {
   id: string;
   trackId?: string | null;
@@ -328,6 +423,9 @@ export interface Course {
   slug?: string;
   thumbnailUrl?: string;
   isPublished: boolean;
+  approvalStatus?: ApprovalStatus;
+  createdBy?: string;
+  creatorName?: string;
   sequentialUnlock?: boolean;
   totalLessons: number;
   totalModules?: number;
@@ -398,4 +496,22 @@ export interface AdminStats {
   activeUsersThisWeek: number;
   averageCompletionRate: number;
   completedLessonsTotal: number;
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: 'creator_app' | 'course_review' | 'direct_message' | 'course_approved' | 'course_rejected' | 'system';
+  title: string;
+  message: string;
+  linkUrl?: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationPreferences {
+  notifyCreatorApps: boolean;
+  notifyCourseReviews: boolean;
+  notifyDirectMessages: boolean;
+  notifyStudentEnrolled: boolean;
 }

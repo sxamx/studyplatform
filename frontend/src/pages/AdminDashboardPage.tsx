@@ -23,16 +23,23 @@ import { Badge } from '../components/shared/Badge';
 import { CourseModal } from '../components/admin/CourseModal';
 import { AIPromptsModal } from '../components/admin/AIPromptsModal';
 import { AdminLogsModal } from '../components/admin/AdminLogsModal';
+import { CreatorApplicationsModal } from '../components/admin/CreatorApplicationsModal';
+import { CourseReviewModal } from '../components/admin/CourseReviewModal';
+import { Diff } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [pendingApplicationsCount, setPendingApplicationsCount] = useState<number>(0);
+  const [pendingReviewsCount, setPendingReviewsCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isApplicationsModalOpen, setIsApplicationsModalOpen] = useState(false);
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -41,10 +48,12 @@ export const AdminDashboardPage: React.FC = () => {
     setIsLoading(true);
     setLoadError(null);
 
-    const [statsResult, coursesResult, usersResult] = await Promise.allSettled([
+    const [statsResult, coursesResult, usersResult, appsResult, reviewsResult] = await Promise.allSettled([
       apiFetch<AdminStats>('/admin/stats'),
       apiFetch<{ courses: Course[] }>('/courses?all=true'),
       apiFetch<{ users: any[] }>('/admin/users'),
+      apiFetch<{ applications: any[] }>('/admin/creator-applications'),
+      apiFetch<{ reviews: any[] }>('/admin/course-reviews'),
     ]);
 
     if (statsResult.status === 'fulfilled') {
@@ -55,6 +64,14 @@ export const AdminDashboardPage: React.FC = () => {
     }
     if (usersResult.status === 'fulfilled') {
       setUsers(usersResult.value.users || []);
+    }
+    if (appsResult.status === 'fulfilled') {
+      const pending = (appsResult.value.applications || []).filter((a: any) => a.status === 'pending').length;
+      setPendingApplicationsCount(pending);
+    }
+    if (reviewsResult.status === 'fulfilled') {
+      const pendingR = (reviewsResult.value.reviews || []).filter((r: any) => r.status === 'pending').length;
+      setPendingReviewsCount(pendingR);
     }
 
     if (
@@ -131,6 +148,26 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleToggleAIAccess = async (userId: string, currentCanUseAi: boolean, currentLimit?: number) => {
+    try {
+      const newCanUse = !currentCanUseAi;
+      let newLimit = currentLimit || 20;
+      if (newCanUse && !currentCanUseAi) {
+        const inputLimit = window.prompt('Límite diario de consultas de IA para este usuario:', String(newLimit));
+        if (inputLimit !== null && !isNaN(Number(inputLimit))) {
+          newLimit = Number(inputLimit);
+        }
+      }
+      await apiFetch(`/admin/users/${userId}/ai-access`, {
+        method: 'PATCH',
+        body: JSON.stringify({ canUseAi: newCanUse, aiDailyLimit: newLimit }),
+      });
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar acceso a IA');
+    }
+  };
+
   const handleTogglePublish = async (course: Course) => {
     try {
       await apiFetch(`/courses/${course.id}`, {
@@ -168,6 +205,36 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsReviewsModalOpen(true)}
+            className="relative"
+            leftIcon={<Diff className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+          >
+            <span>Revisiones Whitelist</span>
+            {pendingReviewsCount > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-emerald-600 text-white animate-pulse">
+                {pendingReviewsCount}
+              </span>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsApplicationsModalOpen(true)}
+            className="relative"
+            leftIcon={<Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+          >
+            <span>Solicitudes Creador</span>
+            {pendingApplicationsCount > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-purple-600 text-white animate-pulse">
+                {pendingApplicationsCount}
+              </span>
+            )}
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -402,6 +469,7 @@ export const AdminDashboardPage: React.FC = () => {
                   <th className="px-6 py-4">Usuario</th>
                   <th className="px-6 py-4">Rol</th>
                   <th className="px-6 py-4">Estado</th>
+                  <th className="px-6 py-4">Acceso IA</th>
                   <th className="px-6 py-4">Progreso</th>
                   <th className="px-6 py-4">Último Acceso</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
@@ -411,6 +479,7 @@ export const AdminDashboardPage: React.FC = () => {
                 {users.map((u) => {
                   const isSuspended = Boolean(u.isSuspended);
                   const isAdmin = u.role === 'ADMIN';
+                  const aiDailyLimit = u.aiDailyLimit || 20;
 
                   return (
                     <tr key={u.id} className={`hover:bg-[#F5F5F5]/40 dark:hover:bg-[#242424]/40 transition-colors ${isSuspended ? 'opacity-60 bg-rose-50/20' : ''}`}>
@@ -434,6 +503,27 @@ export const AdminDashboardPage: React.FC = () => {
                         <Badge variant={isSuspended ? 'error' : 'success'}>
                           {isSuspended ? '🔴 Suspendido' : '🟢 Activo'}
                         </Badge>
+                      </td>
+                      <td className="px-6 py-4">
+                        {isAdmin ? (
+                          <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Ilimitado</span>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleAIAccess(u.id, Boolean(u.canUseAi), aiDailyLimit)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition ${
+                              u.canUseAi
+                                ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 hover:bg-purple-200'
+                                : 'bg-gray-100 dark:bg-[#242424] text-gray-500 hover:bg-gray-200 dark:hover:bg-[#303030]'
+                            }`}
+                            title="Haz clic para activar/desactivar o ajustar límite de IA"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-500" />
+                            <span>{u.canUseAi ? `Activo (${aiDailyLimit}/día)` : 'Desactivado'}</span>
+                          </button>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {Number(u.enrolledCoursesCount || 0) === 0 ? (
@@ -515,6 +605,20 @@ export const AdminDashboardPage: React.FC = () => {
       <AdminLogsModal
         isOpen={isLogsModalOpen}
         onClose={() => setIsLogsModalOpen(false)}
+      />
+
+      {/* Creator Applications Review & Chat Modal */}
+      <CreatorApplicationsModal
+        isOpen={isApplicationsModalOpen}
+        onClose={() => setIsApplicationsModalOpen(false)}
+        onApplicationsChange={loadData}
+      />
+
+      {/* Course Whitelist & Diff Review Modal */}
+      <CourseReviewModal
+        isOpen={isReviewsModalOpen}
+        onClose={() => setIsReviewsModalOpen(false)}
+        onReviewsChange={loadData}
       />
     </div>
   );
