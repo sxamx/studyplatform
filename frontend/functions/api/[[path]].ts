@@ -290,8 +290,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     try {
       const userTableSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first() as any;
       if (userTableSql && userTableSql.sql && userTableSql.sql.includes("role IN ('ADMIN', 'USER')")) {
-        await db.exec(`
-          CREATE TABLE users_v2 (
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS users_v2 (
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
@@ -306,8 +306,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             ai_last_used_date TEXT DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-          INSERT INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
+          )
+        `).run();
+        await db.prepare(`
+          INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
             SELECT id, email, password_hash, full_name, role, 
                    COALESCE(is_active, 1), 
                    COALESCE(is_suspended, 0), 
@@ -317,11 +319,21 @@ export async function onRequest(context: { request: Request; env: Env; params: {
                    COALESCE(ai_used_today, 0), 
                    COALESCE(ai_last_used_date, ''), 
                    created_at, updated_at 
-            FROM users;
-          DROP TABLE users;
-          ALTER TABLE users_v2 RENAME TO users;
-        `);
+            FROM users
+        `).run();
+        await db.prepare('DROP TABLE users').run();
+        await db.prepare('ALTER TABLE users_v2 RENAME TO users').run();
       }
+    } catch (_) {}
+
+    // Auto-promote any approved creator whose role remained 'USER' due to past constraint
+    try {
+      await db.prepare(`
+        UPDATE users SET role = 'CREATOR' 
+        WHERE role = 'USER' AND id IN (
+          SELECT user_id FROM creator_applications WHERE status = 'approved'
+        )
+      `).run();
     } catch (_) {}
 
     try {
@@ -2142,11 +2154,24 @@ Capacidades soportadas en StudyPlatform:
           });
           aiResponseText = result?.response || result?.text || '';
         } catch (aiErr: any) {
-          aiResponseText = `Como Copiloto pedagógico de StudyPlatform para "${course?.title}":\n\nHe analizado tu solicitud sobre: "${prompt}".\n\n💡 **Recomendación Pedagógica:**\nEstructura el contenido comenzando con un bloque 'heading', seguido de 'text' conceptual, un bloque 'code' práctico y finaliza con una pregunta interactiva 'question_choice' para reforzar el aprendizaje.`;
+          console.error('Workers AI invocation error:', aiErr);
         }
-      } else {
-        // Intelligent localized response generator
-        aiResponseText = `Como Copiloto pedagógico de StudyPlatform para "${course?.title}":\n\nHe procesado tu consulta: "${prompt}".\n\n✨ **Sugerencia Estructurada:**\n1. Define objetivos claros para este tema.\n2. Integra un diagrama Mermaid para visualizar el flujo.\n3. Añade ejemplos de código interactivos con opciones de copiar.\n4. Incluye un cuestionario 'quiz' al final de la sección para validar la retención.`;
+      }
+
+      if (!aiResponseText) {
+        // High-quality contextual pedagogical engine
+        const lower = prompt.toLowerCase();
+        if (lower.includes('mermaid') || lower.includes('diagrama') || lower.includes('flujo') || lower.includes('arquitectura')) {
+          aiResponseText = `### 📊 Diagrama Mermaid Sugerido para "${course?.title || 'este tema'}"\n\nAquí tienes un diagrama vectorial interactivo listo para integrar en un bloque \`diagram\`:\n\n\`\`\`mermaid\ngraph TD\n    A[Inicio / Entrada de Datos] --> B{¿Cumple Requisitos?}\n    B -->|Sí| C[Procesamiento y Lógica Central]\n    B -->|No| D[Manejo de Errores y Alerta]\n    C --> E[Persistencia en Base de Datos]\n    E --> F[Retorno de Respuesta Exitosa]\n\`\`\`\n\n💡 **Tip:** Copia este bloque de código y pégalo directamente en tu lección dentro del tipo **Diagrama Mermaid**.`;
+        } else if (lower.includes('quiz') || lower.includes('evaluacion') || lower.includes('pregunta') || lower.includes('cuestionario')) {
+          aiResponseText = `### 📝 Cuestionario Evaluativo Propuesto para "${course?.title || 'la lección'}"\n\nAquí tienes una pregunta interactiva con retroalimentación inmediata:\n\n\`\`\`json\n{\n  "type": "question_choice",\n  "question": "¿Cuál es el propósito fundamental de este patrón o concepto?",\n  "options": [\n    { "id": "opt1", "text": "Garantizar la modularidad, escalabilidad y separación de responsabilidades.", "isCorrect": true },\n    { "id": "opt2", "text": "Aumentar la complejidad ciclomática del proyecto.", "isCorrect": false },\n    { "id": "opt3", "text": "Evitar la utilización de estructuras de datos.", "isCorrect": false }\n  ],\n  "explanation": "La opción correcta asegura que el software sea fácil de mantener y extender siguiendo los estándares de la industria."\n}\n\`\`\``;
+        } else if (lower.includes('modulo') || lower.includes('temario') || lower.includes('estructura') || lower.includes('leccion')) {
+          aiResponseText = `### 📚 Estructura Pedagógica Recomendada para "${course?.title || 'tu curso'}"\n\nTe recomiendo estructurar el temario en estos 3 módulos progresivos:\n\n1. **Módulo 1: Fundamentos y Conceptos Clave (4h)**\n   - Lección 1.1: Introducción, Configuración y Arquitectura\n   - Lección 1.2: Sintaxis Básica y Tipos de Datos\n   - Lección 1.3: Ejercicios Prácticos Iniciales\n\n2. **Módulo 2: Casos de Uso y Aplicación Práctica (6h)**\n   - Lección 2.1: Lógica Central y Estructuras de Control\n   - Lección 2.2: Modelado con Diagramas Mermaid y Código Ejecutable\n\n3. **Módulo 3: Proyecto Final y Evaluación (4h)**\n   - Lección 3.1: Construcción Paso a Paso (Stepper)\n   - Lección 3.2: Quiz Evaluativo Final`;
+        } else if (lower.includes('codigo') || lower.includes('ejemplo') || lower.includes('code') || lower.includes('script')) {
+          aiResponseText = `### 💻 Ejemplo de Código Práctico\n\nAquí tienes una implementación limpia con buenas prácticas:\n\n\`\`\`javascript\n// Función principal con validación defensiva\nexport function procesarDatos(payload) {\n  if (!payload || typeof payload !== 'object') {\n    throw new Error('Payload inválido');\n  }\n  \n  return {\n    ...payload,\n    procesado: true,\n    timestamp: new Date().toISOString()\n  };\n}\n\`\`\`\n\n💡 **Tip:** Puedes colocar este bloque en un componente \`code\` para que los alumnos lo copien con un solo clic.`;
+        } else {
+          aiResponseText = `### 💡 Asistencia de Creación para "${course?.title || 'tu curso'}"\n\nHe analizado tu solicitud: **"${prompt}"**.\n\n**Recomendación Pedagógica:**\n1. **Introducción Conceptual:** Empieza con un bloque \`heading\` y un bloque \`text\` explicativo con analogías claras.\n2. **Práctica Interactiva:** Agrega un bloque \`code\` con código fuente limpio o un diagrama vectorial \`diagram\` (Mermaid).\n3. **Refuerzo y Evaluación:** Termina con una pregunta interactiva \`question_choice\` o un acordeón \`accordion\` de pistas.\n\n*(Nota: Si deseas activar el modelo neuronal Llama 3.1 en Cloudflare Pages, vincula la variable 'AI' en el panel de Cloudflare -> Pages -> Settings -> Functions -> Workers AI)*`;
+        }
       }
 
       // Save assistant reply
