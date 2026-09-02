@@ -907,14 +907,25 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       let targetCourseId = courseId;
       if (!targetCourseId) {
-        const defaultCourse = await db.prepare('SELECT id FROM courses ORDER BY created_at ASC LIMIT 1').first() as any;
-        if (defaultCourse) {
-          targetCourseId = defaultCourse.id;
-        } else {
+        const manifestTitle = jsonData.manifest?.title || jsonData.course?.title || jsonData.title;
+        if (manifestTitle) {
+          const newDesc = jsonData.manifest?.description || jsonData.course?.description || jsonData.description || '';
+          const newThumb = jsonData.manifest?.thumbnailUrl || jsonData.manifest?.thumbnail || jsonData.course?.thumbnailUrl || null;
+          const slug = String(manifestTitle).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now().toString(36);
           targetCourseId = crypto.randomUUID();
-          await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published) VALUES (?, ?, ?, ?, ?, 1)')
-            .bind(targetCourseId, 'Curso General', 'Curso creado para lecciones importadas', 'curso-general', currentUser.id)
+          await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published, thumbnail_url) VALUES (?, ?, ?, ?, ?, 1, ?)')
+            .bind(targetCourseId, manifestTitle, newDesc, slug, currentUser.id, newThumb)
             .run();
+        } else {
+          const defaultCourse = await db.prepare('SELECT id FROM courses ORDER BY created_at ASC LIMIT 1').first() as any;
+          if (defaultCourse) {
+            targetCourseId = defaultCourse.id;
+          } else {
+            targetCourseId = crypto.randomUUID();
+            await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published) VALUES (?, ?, ?, ?, ?, 1)')
+              .bind(targetCourseId, 'Curso General', 'Curso creado para lecciones importadas', 'curso-general', currentUser.id)
+              .run();
+          }
         }
       }
 
@@ -923,7 +934,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         const manifest = jsonData.manifest || {};
         const lessonsList = Array.isArray(jsonData.lessons) ? jsonData.lessons : [];
 
-        // 1. Si el manifest define título y descripción de un nuevo curso, se crea o actualiza
+        // 1. Si el manifest define título y descripción, actualizar metadatos del curso
         if (manifest.title || manifest.description) {
           await db.prepare('UPDATE courses SET title = COALESCE(?, title), description = COALESCE(?, description), thumbnail_url = COALESCE(?, thumbnail_url) WHERE id = ?')
             .bind(manifest.title || null, manifest.description || null, manifest.thumbnailUrl || manifest.thumbnail || null, targetCourseId)
@@ -935,11 +946,20 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         if (Array.isArray(manifest.modules)) {
           for (let mIdx = 0; mIdx < manifest.modules.length; mIdx++) {
             const m = manifest.modules[mIdx];
-            const mId = m.id || crypto.randomUUID();
+            const rawModId = m.id || m.key || `mod_${mIdx + 1}`;
+            const mId = `${targetCourseId}_${rawModId}`;
             const mTitle = m.title || `Módulo ${mIdx + 1}`;
-            await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours) VALUES (?, ?, ?, ?, ?, ?)')
-              .bind(mId, targetCourseId, mTitle, m.description || '', m.order || (mIdx + 1), m.estimatedHours || 4)
+            await db.prepare(`
+              INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                description = excluded.description,
+                order_index = excluded.order_index,
+                estimated_hours = excluded.estimated_hours
+            `).bind(mId, targetCourseId, mTitle, m.description || '', m.order || (mIdx + 1), m.estimatedHours || 4)
               .run();
+
             moduleMap.set(mTitle.toLowerCase().trim(), mId);
             if (m.id) moduleMap.set(String(m.id).toLowerCase().trim(), mId);
             if (m.key) moduleMap.set(String(m.key).toLowerCase().trim(), mId);
@@ -961,7 +981,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             continue;
           }
 
-          const lessonId = lessonData.id || crypto.randomUUID();
+          const rawLessonId = lessonData.id || `les_${lIdx + 1}`;
+          const lessonId = `${targetCourseId}_${rawLessonId}`;
           const title = lessonData.title || `Lección ${lIdx + 1}`;
           const estMin = Number(lessonData.estimatedMinutes || 15);
           const order = Number(lessonData.order || (lIdx + 1));
@@ -987,8 +1008,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             },
           };
 
-          await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .bind(lessonId, targetCourseId, assignedModId, title, lessonData.description || '', order, estMin)
+          await db.prepare(`
+            INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              module_id = excluded.module_id,
+              title = excluded.title,
+              description = excluded.description,
+              order_index = excluded.order_index,
+              estimated_minutes = excluded.estimated_minutes
+          `).bind(lessonId, targetCourseId, assignedModId, title, lessonData.description || '', order, estMin)
             .run();
 
           await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
@@ -1020,16 +1049,24 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
         for (let mIdx = 0; mIdx < courseObj.modules.length; mIdx++) {
           const mod = courseObj.modules[mIdx];
-          const newModId = mod.id || crypto.randomUUID();
-          await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index) VALUES (?, ?, ?, ?, ?)')
-            .bind(newModId, targetCourseId, mod.title || `Módulo ${mIdx + 1}`, mod.description || '', mod.order || (mIdx + 1))
+          const rawModId = mod.id || `mod_${mIdx + 1}`;
+          const newModId = `${targetCourseId}_${rawModId}`;
+          await db.prepare(`
+            INSERT INTO modules (id, course_id, title, description, order_index)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              title = excluded.title,
+              description = excluded.description,
+              order_index = excluded.order_index
+          `).bind(newModId, targetCourseId, mod.title || `Módulo ${mIdx + 1}`, mod.description || '', mod.order || (mIdx + 1))
             .run();
           createdModulesCount++;
 
           if (Array.isArray(mod.lessons)) {
             for (let lIdx = 0; lIdx < mod.lessons.length; lIdx++) {
               const l = mod.lessons[lIdx];
-              const newLessonId = l.id || crypto.randomUUID();
+              const rawLessonId = l.id || `les_${mIdx + 1}_${lIdx + 1}`;
+              const newLessonId = `${targetCourseId}_${rawLessonId}`;
               const lTitle = l.title || `Lección ${lIdx + 1}`;
               const lDesc = l.description || '';
               const lEst = Number(l.estimatedMinutes || 15);
@@ -1047,8 +1084,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
                 },
               };
 
-              await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                .bind(newLessonId, targetCourseId, newModId, lTitle, lDesc, lOrder, lEst)
+              await db.prepare(`
+                INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  module_id = excluded.module_id,
+                  title = excluded.title,
+                  description = excluded.description,
+                  order_index = excluded.order_index,
+                  estimated_minutes = excluded.estimated_minutes
+              `).bind(newLessonId, targetCourseId, newModId, lTitle, lDesc, lOrder, lEst)
                 .run();
 
               await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(newLessonId).run();
@@ -1073,7 +1118,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         for (let idx = 0; idx < jsonData.length; idx++) {
           const item = jsonData[idx];
           const lessonData = item.lesson || item;
-          const lessonId = lessonData.id || crypto.randomUUID();
+          const rawLessonId = lessonData.id || `les_${idx + 1}`;
+          const lessonId = `${targetCourseId}_${rawLessonId}`;
           const title = lessonData.title || `Lección ${idx + 1}`;
 
           const fullLessonJson = {
@@ -1088,8 +1134,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             },
           };
 
-          await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || (idx + 1)), Number(lessonData.estimatedMinutes || 15))
+          await db.prepare(`
+            INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              module_id = excluded.module_id,
+              title = excluded.title,
+              description = excluded.description,
+              order_index = excluded.order_index,
+              estimated_minutes = excluded.estimated_minutes
+          `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || (idx + 1)), Number(lessonData.estimatedMinutes || 15))
             .run();
 
           await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
@@ -1104,7 +1158,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       // Caso 3: Lección individual (sea con o sin clave "lesson", o con "blocks" directos)
       const lessonData = jsonData.lesson || jsonData;
-      const lessonId = lessonData.id || crypto.randomUUID();
+      const rawLessonId = lessonData.id || crypto.randomUUID();
+      const lessonId = `${targetCourseId}_${rawLessonId}`;
       const title = lessonData.title || 'Lección Importada';
 
       const fullLessonJson = {
@@ -1119,8 +1174,16 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         },
       };
 
-      await db.prepare('INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || 1), Number(lessonData.estimatedMinutes || 15))
+      await db.prepare(`
+        INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          module_id = excluded.module_id,
+          title = excluded.title,
+          description = excluded.description,
+          order_index = excluded.order_index,
+          estimated_minutes = excluded.estimated_minutes
+      `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || 1), Number(lessonData.estimatedMinutes || 15))
         .run();
 
       await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();

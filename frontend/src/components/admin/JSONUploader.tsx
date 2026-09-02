@@ -19,8 +19,64 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
   const [successData, setSuccessData] = useState<any | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [loadedFilesInfo, setLoadedFilesInfo] = useState<{ name: string; type: string }[]>([]);
+
+  const getFilesFromDataTransfer = async (dataTransfer: DataTransfer): Promise<File[]> => {
+    const files: File[] = [];
+    const items = dataTransfer.items;
+
+    if (items && items.length > 0) {
+      const traverseEntry = async (entry: any): Promise<void> => {
+        if (!entry) return;
+        if (entry.isFile) {
+          await new Promise<void>((resolve) => {
+            entry.file(
+              (file: File) => {
+                if (file.name.toLowerCase().endsWith('.json') || file.type.includes('json')) {
+                  files.push(file);
+                }
+                resolve();
+              },
+              () => resolve()
+            );
+          });
+        } else if (entry.isDirectory) {
+          const dirReader = entry.createReader();
+          const readEntries = async (): Promise<any[]> => {
+            return new Promise((resolve) => {
+              dirReader.readEntries((entries: any[]) => resolve(entries || []), () => resolve([]));
+            });
+          };
+          let batch = await readEntries();
+          while (batch.length > 0) {
+            for (const child of batch) {
+              await traverseEntry(child);
+            }
+            batch = await readEntries();
+          }
+        }
+      };
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (typeof item.webkitGetAsEntry === 'function') {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            await traverseEntry(entry);
+          }
+        }
+      }
+    }
+
+    if (files.length === 0 && dataTransfer.files) {
+      return Array.from(dataTransfer.files).filter(
+        (f) => f.name.toLowerCase().endsWith('.json') || f.type.includes('json') || f.type === ''
+      );
+    }
+    return files;
+  };
 
   // Process single or multiple JSON files (from picker or drag & drop)
   const processJsonFiles = async (filesList: File[]) => {
@@ -29,7 +85,7 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
     setSuccessData(null);
 
     const jsonFiles = filesList.filter(
-      (f) => f.name.endsWith('.json') || f.type.includes('json') || f.type === ''
+      (f) => f.name.toLowerCase().endsWith('.json') || f.type.includes('json') || f.type === ''
     );
 
     if (jsonFiles.length === 0) {
@@ -113,9 +169,15 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
     e.stopPropagation();
     setIsDragging(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const filesArray = Array.from(e.dataTransfer.files);
-      await processJsonFiles(filesArray);
+    try {
+      const filesArray = await getFilesFromDataTransfer(e.dataTransfer);
+      if (filesArray.length > 0) {
+        await processJsonFiles(filesArray);
+      } else {
+        setError('No se encontraron archivos .json en los elementos arrastrados.');
+      }
+    } catch (err: any) {
+      setError(`Error al procesar archivos arrastrados: ${err.message}`);
     }
   };
 
@@ -231,8 +293,7 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors space-y-3 ${
+        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors space-y-4 ${
           isDragging
             ? 'border-[#0066CC] bg-[#0066CC]/10 dark:bg-[#0066CC]/20'
             : 'border-[#E0E0E0] dark:border-[#2D2D2D] hover:border-[#0066CC] dark:hover:border-[#4D94FF] bg-[#F5F5F5]/50 dark:bg-[#1A1A1A]/50'
@@ -249,28 +310,68 @@ export const JSONUploader: React.FC<JSONUploaderProps> = ({ courses, onUploadSuc
           className="hidden"
         />
 
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-ignore
+          webkitdirectory=""
+          // @ts-ignore
+          directory=""
+          multiple
+          onChange={(e) => {
+            if (e.target.files) processJsonFiles(Array.from(e.target.files));
+          }}
+          className="hidden"
+        />
+
         <div className="w-12 h-12 rounded-xl bg-[#0066CC]/10 dark:bg-[#4D94FF]/20 text-[#0066CC] dark:text-[#4D94FF] flex items-center justify-center mx-auto">
           <Upload className="w-6 h-6" />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <p className="text-sm font-bold text-[#1A1A1A] dark:text-white">
-            Haz clic para seleccionar o arrastra aquí tus archivos .json o la carpeta de tu curso
+            Arrastra aquí tu carpeta de curso o múltiples archivos .json
           </p>
-          <p className="text-xs text-[#666666] dark:text-[#808080] mt-1">
-            Puedes arrastrar múltiples lecciones o seleccionar varios archivos a la vez manteniendo pulsada la tecla Ctrl/Cmd
+          <p className="text-xs text-[#666666] dark:text-[#808080]">
+            Soporta archivos individuales, carpetas completas y paquetes modulares (course.json + lecciones).
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+          >
+            📄 Seleccionar Múltiples Archivos JSON
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              folderInputRef.current?.click();
+            }}
+          >
+            📁 Seleccionar Carpeta del Curso
+          </Button>
+        </div>
+
         {loadedFilesInfo.length > 0 && (
-          <div className="pt-3 border-t border-gray-200 dark:border-gray-800 text-left max-h-40 overflow-y-auto space-y-1">
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-800 text-left max-h-48 overflow-y-auto space-y-1">
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
               ✓ {loadedFilesInfo.length} Archivos cargados y listos:
             </span>
             {loadedFilesInfo.map((f, idx) => (
-              <div key={idx} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+              <div key={idx} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 py-0.5 px-2 rounded hover:bg-gray-100 dark:hover:bg-[#252525]">
                 <span className="truncate font-mono">📄 {f.name}</span>
-                <Badge variant="primary" className="text-[9px] py-0 px-1.5">{f.type}</Badge>
+                <Badge variant="primary" className="text-[9px] py-0 px-1.5 shrink-0 ml-2">{f.type}</Badge>
               </div>
             ))}
           </div>
