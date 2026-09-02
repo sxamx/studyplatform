@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   CheckCircle2,
@@ -41,16 +42,10 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
   const loadReviews = async () => {
     try {
       setIsLoading(true);
-      setErrorMessage(null);
-      const res = await apiFetch<{ reviews: CourseReview[] }>('/admin/course-reviews');
-      setReviews(res.reviews || []);
-      if (res.reviews && res.reviews.length > 0) {
-        if (!selectedReview) {
-          const initial = res.reviews.find((r) => r.status === 'pending') || res.reviews[0];
-          selectReview(initial.id);
-        } else {
-          selectReview(selectedReview.id);
-        }
+      const data = await apiFetch<{ reviews: CourseReview[] }>('/admin/course-reviews');
+      setReviews(data.reviews || []);
+      if (data.reviews && data.reviews.length > 0 && !selectedReview) {
+        loadReviewDetail(data.reviews[0].id);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Error al cargar revisiones');
@@ -59,14 +54,18 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
     }
   };
 
-  const selectReview = async (reviewId: string) => {
+  const loadReviewDetail = async (id: string) => {
     try {
-      const res = await apiFetch<{ review: CourseReview }>(`/admin/course-reviews/${reviewId}`);
-      if (res.review) {
-        setSelectedReview(res.review);
-        setAdminFeedback(res.review.adminFeedback || '');
-      }
-    } catch (_) {}
+      const data = await apiFetch<{ review: CourseReview }>(`/admin/course-reviews/${id}`);
+      setSelectedReview(data.review);
+      setAdminFeedback(data.review.adminFeedback || '');
+    } catch (err: any) {
+      alert(err.message || 'Error al cargar detalle de revisión');
+    }
+  };
+
+  const selectReview = (id: string) => {
+    loadReviewDetail(id);
   };
 
   useEffect(() => {
@@ -85,8 +84,9 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
       });
       await loadReviews();
       if (onReviewsChange) onReviewsChange();
+      setSelectedReview(null);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar decisión');
+      alert(err.message || 'Error al procesar decisión');
     } finally {
       setIsDeciding(false);
     }
@@ -99,27 +99,26 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
     return r.status === filter;
   });
 
-  // Calculate Diff between proposed and current snapshots
   const calculateDiff = (proposed?: CourseSnapshot | null, current?: CourseSnapshot | null) => {
     if (!proposed) return null;
-    const isNew = !current || !current.course;
+    const isNew = !current;
 
     const proposedLessons = proposed.lessons || [];
     const currentLessons = current?.lessons || [];
 
-    const currentLessonMap = new Map(currentLessons.map((l) => [l.id, l]));
-    const proposedLessonMap = new Map(proposedLessons.map((l) => [l.id, l]));
+    const currentMap = new Map(currentLessons.map((l) => [l.id, l]));
+    const proposedMap = new Map(proposedLessons.map((l) => [l.id, l]));
 
-    const addedLessons = proposedLessons.filter((l) => !currentLessonMap.has(l.id));
-    const deletedLessons = currentLessons.filter((l) => !proposedLessonMap.has(l.id));
+    const addedLessons = proposedLessons.filter((l) => !currentMap.has(l.id));
+    const deletedLessons = currentLessons.filter((l) => !proposedMap.has(l.id));
     const modifiedLessons = proposedLessons.filter((l) => {
-      const old = currentLessonMap.get(l.id);
-      if (!old) return false;
+      const c = currentMap.get(l.id);
+      if (!c) return false;
       return (
-        old.title !== l.title ||
-        old.description !== l.description ||
-        old.blocksCount !== l.blocksCount ||
-        JSON.stringify(old.blocks || []) !== JSON.stringify(l.blocks || [])
+        c.title !== l.title ||
+        c.description !== l.description ||
+        c.estimatedMinutes !== l.estimatedMinutes ||
+        JSON.stringify(c.blocks || []) !== JSON.stringify(l.blocks || [])
       );
     });
 
@@ -127,6 +126,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
       current &&
       (current.course.title !== proposed.course.title ||
         current.course.description !== proposed.course.description ||
+        current.course.thumbnailUrl !== proposed.course.thumbnailUrl ||
         current.course.sequentialUnlock !== proposed.course.sequentialUnlock);
 
     return {
@@ -141,11 +141,17 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
 
   const diffData = selectedReview ? calculateDiff(selectedReview.proposedData, selectedReview.currentData) : null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-6xl bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[90vh]">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-6xl bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[88vh] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="p-5 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-emerald-50/30 to-transparent dark:from-blue-950/20 dark:via-emerald-950/10 dark:to-transparent">
+        <div className="p-5 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-emerald-50/30 to-transparent dark:from-blue-950/20 dark:via-emerald-950/10 dark:to-transparent shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md">
               <Diff className="w-5 h-5" />
@@ -480,6 +486,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

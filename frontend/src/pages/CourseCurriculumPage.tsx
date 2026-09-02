@@ -24,6 +24,7 @@ import { Modal } from '../components/shared/Modal';
 import { Input } from '../components/shared/Input';
 import { VisualLessonEditor } from '../components/admin/editor/VisualLessonEditor';
 import { AIPromptsModal } from '../components/admin/AIPromptsModal';
+import { CourseAIChatDrawer } from '../components/creator/CourseAIChatDrawer';
 
 export const CourseCurriculumPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +35,7 @@ export const CourseCurriculumPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
 
   // Modals
   // 1. Module Modal (Create / Edit)
@@ -425,6 +427,15 @@ export const CourseCurriculumPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setIsAiDrawerOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+            leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+          >
+            Copiloto IA
+          </Button>
+          <Button
             variant="secondary"
             size="sm"
             onClick={() => setIsPromptsModalOpen(true)}
@@ -441,7 +452,7 @@ export const CourseCurriculumPage: React.FC = () => {
             Copiar Temario
           </Button>
           <Button
-            variant="primary"
+            variant="outline"
             size="sm"
             onClick={() => navigate(`/courses/${course.id}`)}
             leftIcon={<Eye className="w-3.5 h-3.5" />}
@@ -1019,6 +1030,16 @@ export const CourseCurriculumPage: React.FC = () => {
         isOpen={isPromptsModalOpen}
         onClose={() => setIsPromptsModalOpen(false)}
       />
+
+      {/* Course AI Copilot Drawer */}
+      {course && (
+        <CourseAIChatDrawer
+          isOpen={isAiDrawerOpen}
+          onClose={() => setIsAiDrawerOpen(false)}
+          courseId={course.id}
+          courseTitle={course.title}
+        />
+      )}
     </div>
   );
 };

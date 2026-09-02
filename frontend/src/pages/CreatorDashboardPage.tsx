@@ -231,6 +231,53 @@ export const CreatorDashboardPage: React.FC = () => {
         </Card>
       </div>
 
+      {/* AI Copilot Highlight Banner */}
+      <Card className="p-5 sm:p-6 bg-gradient-to-r from-purple-900/15 via-blue-900/10 to-transparent border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-[#0066CC] text-white flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm sm:text-base text-[#1A1A1A] dark:text-white">
+                Copiloto de IA Pedagógico (Cloudflare Workers AI)
+              </h3>
+              <Badge variant="primary" className="bg-purple-600 text-white border-none text-[10px]">
+                Llama 3.1 8B
+              </Badge>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
+              Diseña y genera lecciones interactivas, diagramas Mermaid, fórmulas LaTeX KaTeX y quizzes interactivos con asistencia experta en tiempo real.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/creator/guides')}
+            className="flex-1 sm:flex-none text-xs"
+          >
+            Ver Normas & Prompts
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              if (courses.length > 0) {
+                setAiChatCourse(courses[0]);
+              } else {
+                alert('Crea o sube primero un curso para iniciar el chat del Copiloto.');
+              }
+            }}
+            className="flex-1 sm:flex-none bg-purple-600 hover:bg-purple-700 text-white"
+            leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+          >
+            Abrir Copiloto IA
+          </Button>
+        </div>
+      </Card>
+
       {/* Creator Courses List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">

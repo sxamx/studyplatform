@@ -25,6 +25,21 @@
     <!-- Theme Colors -->
     <meta name="theme-color" content="#0066CC" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)" />
+
+    <!-- Synchronous Immediate Theme Initialization (Zero Flash on F5) -->
+    <script>
+      (function () {
+        try {
+          var savedTheme = localStorage.getItem('studyplatform_theme');
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors duration-200 antialiased selection:bg-[#0066CC]/20 dark:selection:bg-[#4D94FF]/20">
     <div id="root"></div>

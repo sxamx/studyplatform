@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Bell, Check, Sparkles, MessageSquare, BookOpen, Users, AlertCircle } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { NotificationPreferences } from '../../types';
@@ -69,9 +70,15 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-md bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-sm">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-sm animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-5 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-transparent dark:from-blue-950/20 dark:to-transparent">
           <div className="flex items-center gap-3">
@@ -226,6 +233,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

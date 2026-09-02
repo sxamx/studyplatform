@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Sparkles,
@@ -62,46 +63,50 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
     }
   };
 
-  const handleSend = async (textToSend?: string) => {
-    const text = (textToSend || inputPrompt).trim();
-    if (!text || isSending) return;
+  const handleSendMessage = async (promptToSend?: string) => {
+    const text = promptToSend || inputPrompt;
+    if (!text.trim() || isSending) return;
 
+    const userMessage: CourseAIMessage = {
+      id: 'temp-' + Date.now(),
+      courseId,
+      userId: 'me',
+      role: 'user',
+      content: text.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
     setInputPrompt('');
     setIsSending(true);
     setError(null);
 
-    // Optimistic user message
-    const tempUserMsg: CourseAIMessage = {
-      id: `temp-${Date.now()}`,
-      courseId,
-      userId: 'me',
-      role: 'user',
-      content: text,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempUserMsg]);
-
     try {
-      const res = await apiFetch<{ message: CourseAIMessage; quota: AIQuota }>(
-        `/ai/courses/${courseId}/chat`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ prompt: text }),
-        }
-      );
+      const res = await apiFetch<{
+        reply: string;
+        userMessage: CourseAIMessage;
+        assistantMessage: CourseAIMessage;
+        quota: AIQuota;
+      }>(`/ai/courses/${courseId}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt: text.trim() }),
+      });
 
-      setMessages((prev) => [...prev.filter((m) => m.id !== tempUserMsg.id), tempUserMsg, res.message]);
-      if (res.quota) setQuota(res.quota);
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== userMessage.id),
+        res.userMessage,
+        res.assistantMessage,
+      ]);
+      setQuota(res.quota);
     } catch (err: any) {
       setError(err.message || 'Error al comunicarse con el Copiloto de IA');
-      // Keep optimistic message or notify
     } finally {
       setIsSending(false);
     }
   };
 
-  const handleCopy = (content: string, id: string) => {
-    navigator.clipboard.writeText(content);
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -114,11 +119,17 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-lg bg-white dark:bg-[#121212] h-full shadow-2xl flex flex-col border-l border-[#E0E0E0] dark:border-[#2D2D2D] animate-slideInRight">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex justify-end bg-black/60 backdrop-blur-md animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white dark:bg-[#121212] h-full shadow-2xl flex flex-col border-l border-[#E0E0E0] dark:border-[#2D2D2D] animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="p-4 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-purple-50/50 to-blue-50/30 dark:from-purple-950/20 dark:to-blue-950/20">
+        <div className="p-4 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-purple-50/50 to-blue-50/30 dark:from-purple-950/20 dark:to-blue-950/20 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-md">
               <Sparkles className="w-5 h-5" />
@@ -242,7 +253,7 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
           {quickPrompts.map((qp, idx) => (
             <button
               key={idx}
-              onClick={() => handleSend(qp)}
+              onClick={() => handleSendMessage(qp)}
               disabled={isSending}
               className="shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#222222] border border-[#E0E0E0] dark:border-[#333333] hover:border-purple-400 hover:text-purple-600 text-gray-600 dark:text-gray-300 transition-colors"
             >
@@ -256,7 +267,7 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleSend();
+              handleSendMessage();
             }}
             className="flex items-center gap-2"
           >
@@ -280,6 +291,7 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

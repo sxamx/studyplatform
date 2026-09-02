@@ -1,16 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { GraduationCap, ShieldCheck, LogOut, BookOpen, User, ShoppingBag, LogIn, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
 import { GithubIcon, DiscordIcon } from './SocialIcons';
-import { ApplyCreatorModal } from '../creator/ApplyCreatorModal';
 import { NotificationDropdown } from './NotificationDropdown';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -92,16 +90,6 @@ export const Navbar: React.FC = () => {
               <span>Admin Panel</span>
             </Link>
           )}
-
-          {user?.role === 'USER' && (
-            <button
-              onClick={() => setIsApplyModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg text-sm font-medium text-[#666666] hover:text-purple-600 dark:text-[#B0B0B0] dark:hover:text-purple-400 transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-              <span>Ser Creador</span>
-            </button>
-          )}
         </nav>
 
         {/* Right Actions */}
@@ -145,23 +133,26 @@ export const Navbar: React.FC = () => {
                   {user.role}
                 </span>
               </div>
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#0066CC]/10 text-[#0066CC] dark:bg-[#4D94FF]/20 dark:text-[#4D94FF] border border-[#0066CC]/30 flex items-center justify-center text-xs font-bold">
-                {user.fullName ? user.fullName[0].toUpperCase() : <User className="w-4 h-4" />}
+
+              <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[#242424] flex items-center justify-center text-[#666666] dark:text-[#B0B0B0]">
+                <User className="w-4 h-4" />
               </div>
+
               <button
                 onClick={handleLogout}
-                title="Cerrar Sesión"
-                className="p-1.5 sm:p-2 text-[#666666] hover:text-[#DC3545] dark:text-[#B0B0B0] dark:hover:text-[#FF6B6B] rounded-lg transition-colors"
+                className="p-2 rounded-lg text-[#666666] hover:text-[#DC3545] dark:text-[#B0B0B0] dark:hover:text-[#DC3545] hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+                title="Cerrar sesión"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              {/* Mobile single compact button to prevent horizontal overflow */}
-              <div className="sm:hidden">
-                <Button variant="primary" size="sm" onClick={() => navigate('/login')} leftIcon={<LogIn className="w-3.5 h-3.5" />}>
-                  Entrar
+            <div className="flex items-center gap-2">
+              {/* Mobile compact icon button */}
+              <div className="flex sm:hidden items-center gap-1">
+                <Button variant="primary" size="sm" onClick={() => navigate('/login')} className="px-2.5 h-8">
+                  <LogIn className="w-3.5 h-3.5 mr-1" />
+                  <span>Entrar</span>
                 </Button>
               </div>
 
@@ -178,12 +169,6 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Apply Creator Modal */}
-      <ApplyCreatorModal
-        isOpen={isApplyModalOpen}
-        onClose={() => setIsApplyModalOpen(false)}
-      />
     </header>
   );
 };

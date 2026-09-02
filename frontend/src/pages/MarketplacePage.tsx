@@ -14,6 +14,7 @@ import { useAuthStore } from '../stores/authStore';
 import { Card } from '../components/shared/Card';
 import { Button } from '../components/shared/Button';
 import { Badge } from '../components/shared/Badge';
+import { ApplyCreatorModal } from '../components/creator/ApplyCreatorModal';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export const MarketplacePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'free' | 'paid'>('all');
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
 
   const loadMarketplace = async () => {
     setIsLoading(true);
@@ -80,7 +82,7 @@ export const MarketplacePage: React.FC = () => {
   const enrolledCount = safeCourses.filter((c) => c.isEnrolled).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fadeIn">
       {/* Hero Banner */}
       <div className="p-8 sm:p-12 bg-gradient-to-br from-[#0066CC] to-[#004C99] dark:from-[#0B2545] dark:to-[#051329] rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-8 border border-blue-400/20">
         <div className="space-y-4 max-w-xl">
@@ -97,6 +99,27 @@ export const MarketplacePage: React.FC = () => {
             Descubre nuevos cursos creados por la comunidad, profundiza en temas avanzados y agrégalos a tu plan de estudio con un solo clic.
           </p>
         </div>
+
+        {/* Creator CTA if student */}
+        {user?.role === 'USER' && (
+          <div className="p-5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl flex flex-col items-center md:items-start gap-3 text-center md:text-left max-w-sm shrink-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+              <Sparkles className="w-4 h-4" />
+              <span>¿Quieres ser Instructor?</span>
+            </div>
+            <p className="text-xs text-white/90">
+              Crea y publica tus propios cursos modulares interactivos en el Marketplace.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsApplyModalOpen(true)}
+              className="w-full bg-white text-[#0066CC] hover:bg-gray-100 font-bold border-none"
+            >
+              Postular como Creador
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Auth Prompt if not logged in */}
@@ -318,6 +341,13 @@ export const MarketplacePage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Apply Creator Modal */}
+      <ApplyCreatorModal
+        isOpen={isApplyModalOpen}
+        onClose={() => setIsApplyModalOpen(false)}
+        onStatusChange={loadMarketplace}
+      />
     </div>
   );
 };

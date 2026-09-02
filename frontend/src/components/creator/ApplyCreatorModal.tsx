@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Sparkles,
@@ -71,7 +72,7 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
   const handleSubmitApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bio.trim() || !motivation.trim()) {
-      setError('Por favor completa tu biografía y motivación.');
+      setError('La biografía y motivación son obligatorias.');
       return;
     }
 
@@ -89,7 +90,7 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
       await loadApplication();
       if (onStatusChange) onStatusChange();
     } catch (err: any) {
-      setError(err.message || 'Error al enviar postulación.');
+      setError(err.message || 'Error al enviar la postulación.');
     } finally {
       setIsSubmitting(false);
     }
@@ -126,17 +127,23 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl bg-white dark:bg-[#141414] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="p-6 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-purple-50/30 to-transparent dark:from-blue-950/20 dark:via-purple-950/10 dark:to-transparent">
+        <div className="p-5 sm:p-6 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gradient-to-r from-blue-50/50 via-purple-50/30 to-transparent dark:from-blue-950/20 dark:via-purple-950/10 dark:to-transparent shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#0066CC] to-[#7B2CBF] text-white flex items-center justify-center shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#0066CC] to-[#7B2CBF] text-white flex items-center justify-center shadow-md shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[#1A1A1A] dark:text-white tracking-tight">
+              <h2 className="text-lg sm:text-xl font-bold text-[#1A1A1A] dark:text-white tracking-tight">
                 Postulación a Creador de Cursos
               </h2>
               <p className="text-xs text-[#666666] dark:text-[#808080]">
@@ -146,7 +153,7 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#242424] transition"
+            className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#242424] transition shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -350,6 +357,7 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
