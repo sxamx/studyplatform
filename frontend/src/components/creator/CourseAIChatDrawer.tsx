@@ -83,21 +83,23 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
 
     try {
       const res = await apiFetch<{
-        reply: string;
-        userMessage: CourseAIMessage;
-        assistantMessage: CourseAIMessage;
+        message: CourseAIMessage;
         quota: AIQuota;
       }>(`/ai/courses/${courseId}/chat`, {
         method: 'POST',
         body: JSON.stringify({ prompt: text.trim() }),
       });
 
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== userMessage.id),
-        res.userMessage,
-        res.assistantMessage,
-      ]);
-      setQuota(res.quota);
+      if (res.message) {
+        setMessages((prev) => [
+          ...prev.filter((m) => m && m.id !== userMessage.id),
+          userMessage,
+          res.message,
+        ]);
+      }
+      if (res.quota) {
+        setQuota(res.quota);
+      }
     } catch (err: any) {
       setError(err.message || 'Error al comunicarse con el Copiloto de IA');
     } finally {
@@ -190,7 +192,7 @@ export const CourseAIChatDrawer: React.FC<CourseAIChatDrawerProps> = ({
               </p>
             </div>
           ) : (
-            messages.map((m) => (
+            (messages || []).filter((m) => m && m.role).map((m) => (
               <div
                 key={m.id}
                 className={`flex gap-2.5 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}

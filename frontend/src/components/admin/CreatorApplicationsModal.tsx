@@ -330,7 +330,7 @@ export const CreatorApplicationsModal: React.FC<CreatorApplicationsModalProps> =
                       <span>Chat Directo con el Postulante</span>
                     </div>
 
-                    <div className="p-4 bg-gray-50 dark:bg-[#202020] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl min-h-[140px] max-h-[200px] overflow-y-auto space-y-3">
+                    <div className="p-4 bg-gray-50 dark:bg-[#202020] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl min-h-[140px] max-h-[200px] overflow-y-auto space-y-3 pr-3">
                       {selectedApp.messages && selectedApp.messages.length > 0 ? (
                         selectedApp.messages.map((m) => {
                           const isAdminMsg = m.senderRole === 'ADMIN';

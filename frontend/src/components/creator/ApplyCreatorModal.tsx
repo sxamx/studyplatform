@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   Sparkles,
@@ -30,7 +31,8 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
   onClose,
   onStatusChange,
 }) => {
-  const { user } = useAuthStore();
+  const { user, checkAuth } = useAuthStore();
+  const navigate = useNavigate();
   const [application, setApplication] = useState<CreatorApplication | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -177,29 +179,31 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
             /* Existing Application Review & Chat */
             <div className="space-y-6">
               {/* Status Banner */}
-              <div className="p-5 rounded-2xl border bg-gray-50/70 dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between gap-4">
+              <div className="p-4 sm:p-5 rounded-2xl border bg-gray-50/70 dark:bg-[#1A1A1A] border-[#E0E0E0] dark:border-[#2D2D2D] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   {application.status === 'approved' ? (
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                   ) : application.status === 'rejected' ? (
-                    <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                    <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 shrink-0">
                       <XCircle className="w-6 h-6" />
                     </div>
                   ) : (
-                    <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
                       <Clock className="w-6 h-6 animate-pulse" />
                     </div>
                   )}
                   <div>
-                    <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                       Estado de la Solicitud
                     </span>
-                    <div className="text-base font-bold text-[#1A1A1A] dark:text-white flex items-center gap-2 mt-0.5">
-                      {application.status === 'approved' && '¡Felicidades! Postulación Aprobada'}
-                      {application.status === 'rejected' && 'Postulación Rechazada'}
-                      {application.status === 'pending' && 'En Revisión por el Administrador'}
+                    <div className="text-sm sm:text-base font-bold text-[#1A1A1A] dark:text-white flex flex-wrap items-center gap-2 mt-0.5">
+                      <span>
+                        {application.status === 'approved' && '¡Felicidades! Postulación Aprobada'}
+                        {application.status === 'rejected' && 'Postulación Rechazada'}
+                        {application.status === 'pending' && 'En Revisión por el Administrador'}
+                      </span>
                       <Badge
                         variant={
                           application.status === 'approved'
@@ -219,10 +223,14 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
+                      try {
+                        await checkAuth();
+                      } catch (_) {}
                       onClose();
-                      window.location.href = '/creator';
+                      navigate('/creator');
                     }}
+                    className="w-full sm:w-auto bg-[#0066CC] hover:bg-[#0052A3] text-white shrink-0 shadow-sm"
                   >
                     Ir al Panel de Creador
                   </Button>
@@ -236,7 +244,7 @@ export const ApplyCreatorModal: React.FC<ApplyCreatorModalProps> = ({
                   <span>Chat Directo con el Administrador</span>
                 </div>
 
-                <div className="p-4 bg-gray-50 dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl min-h-[160px] max-h-[220px] overflow-y-auto space-y-3">
+                <div className="p-4 bg-gray-50 dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl min-h-[160px] max-h-[220px] overflow-y-auto space-y-3 pr-3">
                   {application.messages && application.messages.length > 0 ? (
                     application.messages.map((m) => {
                       const isMe = m.senderId === user?.id;

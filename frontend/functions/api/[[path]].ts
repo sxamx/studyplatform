@@ -285,6 +285,45 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     try {
       await db.prepare('ALTER TABLE users ADD COLUMN ai_last_used_date VARCHAR(10)').run();
     } catch (_) {}
+
+    // Safe SQLite CHECK constraint migration for users.role to allow 'CREATOR'
+    try {
+      const userTableSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first() as any;
+      if (userTableSql && userTableSql.sql && userTableSql.sql.includes("role IN ('ADMIN', 'USER')")) {
+        await db.exec(`
+          CREATE TABLE users_v2 (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'USER',
+            is_active INTEGER DEFAULT 1,
+            is_suspended INTEGER DEFAULT 0,
+            theme_preference TEXT DEFAULT 'system',
+            can_use_ai INTEGER DEFAULT 0,
+            ai_daily_limit INTEGER DEFAULT 20,
+            ai_used_today INTEGER DEFAULT 0,
+            ai_last_used_date TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
+            SELECT id, email, password_hash, full_name, role, 
+                   COALESCE(is_active, 1), 
+                   COALESCE(is_suspended, 0), 
+                   COALESCE(theme_preference, 'system'), 
+                   COALESCE(can_use_ai, 0), 
+                   COALESCE(ai_daily_limit, 20), 
+                   COALESCE(ai_used_today, 0), 
+                   COALESCE(ai_last_used_date, ''), 
+                   created_at, updated_at 
+            FROM users;
+          DROP TABLE users;
+          ALTER TABLE users_v2 RENAME TO users;
+        `);
+      }
+    } catch (_) {}
+
     try {
       await db.prepare(`
         CREATE TABLE IF NOT EXISTS course_ai_messages (
@@ -1500,7 +1539,15 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
     if (path === '/creator/application' && method === 'GET') {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
-      const app = await db.prepare('SELECT * FROM creator_applications WHERE user_id = ?').bind(currentUser.id).first() as any;
+      const requestedAppId = url.searchParams.get('id');
+
+      let app: any;
+      if (requestedAppId && currentUser.role === 'ADMIN') {
+        app = await db.prepare('SELECT * FROM creator_applications WHERE id = ?').bind(requestedAppId).first();
+      } else {
+        app = await db.prepare('SELECT * FROM creator_applications WHERE user_id = ?').bind(currentUser.id).first();
+      }
+
       if (!app) return json({ application: null });
 
       const messagesRes = await db.prepare(`
