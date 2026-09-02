@@ -1,4 +1,6 @@
 import React from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 interface MarkdownTextProps {
   content: string;
@@ -8,10 +10,10 @@ interface MarkdownTextProps {
 export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, className = '' }) => {
   if (!content) return null;
 
-  // Formatter for inline text: bold, italic, inline code, links, strikethrough
+  // Formatter for inline text: math LaTeX ($x$, $$...$$), bold, italic, inline code, links, strikethrough
   const formatInline = (text: string): React.ReactNode[] => {
     const tokens: React.ReactNode[] = [];
-    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\))/g;
+    const regex = /(\$\$[^\$]+\$\$|\$[^\$]+\$|`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[([^\]]+)\]\(([^)]+)\))/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
@@ -21,7 +23,35 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, className =
       }
 
       const matchStr = match[0];
-      if (matchStr.startsWith('`') && matchStr.endsWith('`')) {
+      if (matchStr.startsWith('$$') && matchStr.endsWith('$$')) {
+        const formula = matchStr.slice(2, -2).trim();
+        try {
+          const html = katex.renderToString(formula, { displayMode: true, throwOnError: false });
+          tokens.push(
+            <span
+              key={match.index}
+              className="inline-block my-1 text-center"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          );
+        } catch {
+          tokens.push(<code key={match.index}>{matchStr}</code>);
+        }
+      } else if (matchStr.startsWith('$') && matchStr.endsWith('$')) {
+        const formula = matchStr.slice(1, -1).trim();
+        try {
+          const html = katex.renderToString(formula, { displayMode: false, throwOnError: false });
+          tokens.push(
+            <span
+              key={match.index}
+              className="inline-block mx-0.5 text-[#0066CC] dark:text-[#66B2FF] font-serif"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          );
+        } catch {
+          tokens.push(<code key={match.index}>{matchStr}</code>);
+        }
+      } else if (matchStr.startsWith('`') && matchStr.endsWith('`')) {
         tokens.push(
           <code
             key={match.index}

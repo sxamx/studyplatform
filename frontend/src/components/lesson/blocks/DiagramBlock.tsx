@@ -7,6 +7,30 @@ interface DiagramBlockProps {
   block: IDiagramBlock;
 }
 
+function sanitizeMermaidSyntax(raw: string): string {
+  if (!raw) return '';
+  let syntax = raw.trim();
+
+  // Remove markdown code fences if present
+  syntax = syntax.replace(/^```(?:mermaid)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+
+  // Auto-quote unquoted node labels with parentheses, equals, colons or linebreaks
+  syntax = syntax.replace(/(\b[a-zA-Z0-9_-]+)\s*\[([^\]"\n]+)\]/g, (_match, id, label) => {
+    const clean = label
+      .replace(/\\n/g, '<br/>')
+      .replace(/"/g, "'")
+      .trim();
+    return `${id}["${clean}"]`;
+  });
+
+  // Convert escaped newlines to HTML break tags inside quotes
+  syntax = syntax.replace(/\["([^"]*)"\]/g, (_match, inner) => {
+    return `["${inner.replace(/\\n/g, '<br/>')}"]`;
+  });
+
+  return syntax;
+}
+
 export const DiagramBlock: React.FC<DiagramBlockProps> = ({ block }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgHtml, setSvgHtml] = useState<string>('');
@@ -29,7 +53,7 @@ export const DiagramBlock: React.FC<DiagramBlockProps> = ({ block }) => {
         });
 
         const uniqueId = `mermaid-${block.id}-${Math.random().toString(36).substring(2, 9)}`;
-        const cleanSyntax = (block.syntax || '').trim();
+        const cleanSyntax = sanitizeMermaidSyntax(block.syntax || '');
 
         if (!cleanSyntax) {
           if (isMounted) setSvgHtml('');
