@@ -1680,7 +1680,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       realLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-      return json({ logs: realLogs });
+      const userTableSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first() as any;
+      return json({ logs: realLogs, usersTableSql: userTableSql?.sql });
     }
 
     // -------------------------------------------------------------
