@@ -1015,9 +1015,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso.' }, 403);
       }
 
-      let jsonData: any = jsonContent;
-      if (typeof jsonContent === 'string') {
-        try { jsonData = JSON.parse(jsonContent); } catch { return json({ error: 'JSON inválido. Verifica la sintaxis del archivo.' }, 400); }
+      let jsonData: any = jsonContent !== undefined ? jsonContent : body;
+      if (typeof jsonData === 'string') {
+        try { jsonData = JSON.parse(jsonData); } catch { return json({ error: 'JSON inválido. Verifica la sintaxis del archivo.' }, 400); }
+      }
+      if (!jsonData || typeof jsonData !== 'object') {
+        return json({ error: 'Estructura de JSON inválida' }, 400);
       }
 
       let targetCourseId = courseId;
