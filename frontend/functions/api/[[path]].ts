@@ -1035,15 +1035,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             .bind(targetCourseId, manifestTitle, newDesc, slug, currentUser.id, newThumb)
             .run();
         } else {
-          const defaultCourse = await db.prepare('SELECT id FROM courses ORDER BY created_at ASC LIMIT 1').first() as any;
-          if (defaultCourse) {
-            targetCourseId = defaultCourse.id;
-          } else {
-            targetCourseId = crypto.randomUUID();
-            await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published) VALUES (?, ?, ?, ?, ?, 1)')
-              .bind(targetCourseId, 'Curso General', 'Curso creado para lecciones importadas', 'curso-general', currentUser.id)
-              .run();
-          }
+          const fallbackTitle = jsonData.lesson?.title ? `Curso: ${jsonData.lesson.title}` : `Curso Importado ${new Date().toLocaleDateString()}`;
+          const fallbackSlug = `curso-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+          targetCourseId = crypto.randomUUID();
+          await db.prepare('INSERT INTO courses (id, title, description, slug, created_by, is_published) VALUES (?, ?, ?, ?, ?, 1)')
+            .bind(targetCourseId, fallbackTitle, 'Curso creado automáticamente para contenidos importados', fallbackSlug, currentUser.id)
+            .run();
         }
 
         // Auto-enroll creator in preferences
@@ -2293,10 +2290,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const reviewsRes = await db.prepare(`
         SELECT cr.id, cr.course_id as courseId, cr.creator_id as creatorId, cr.review_type as reviewType,
           cr.status, cr.admin_feedback as adminFeedback, cr.created_at as createdAt, cr.updated_at as updatedAt,
-          c.title as courseTitle, u.full_name as creatorName, u.email as creatorEmail
+          COALESCE(c.title, 'Curso Eliminado') as courseTitle, COALESCE(u.full_name, 'Usuario') as creatorName, COALESCE(u.email, 'sin-email') as creatorEmail
         FROM course_reviews cr
-        JOIN courses c ON c.id = cr.course_id
-        JOIN users u ON u.id = cr.creator_id
+        LEFT JOIN courses c ON c.id = cr.course_id
+        LEFT JOIN users u ON u.id = cr.creator_id
         ORDER BY cr.created_at DESC
       `).all();
 
@@ -2308,10 +2305,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const reviewId = path.replace('/admin/course-reviews/', '');
 
       const review = await db.prepare(`
-        SELECT cr.*, c.title as courseTitle, u.full_name as creatorName, u.email as creatorEmail
+        SELECT cr.*, COALESCE(c.title, 'Curso Eliminado') as courseTitle, COALESCE(u.full_name, 'Usuario') as creatorName, COALESCE(u.email, 'sin-email') as creatorEmail
         FROM course_reviews cr
-        JOIN courses c ON c.id = cr.course_id
-        JOIN users u ON u.id = cr.creator_id
+        LEFT JOIN courses c ON c.id = cr.course_id
+        LEFT JOIN users u ON u.id = cr.creator_id
         WHERE cr.id = ?
       `).bind(reviewId).first() as any;
 
@@ -2358,8 +2355,22 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         .bind(status, adminFeedback || null, reviewId).run();
 
       if (status === 'approved') {
-        await db.prepare("UPDATE courses SET approval_status = 'approved', is_published = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-          .bind(review.course_id).run();
+        if (review.review_type === 'deletion') {
+          try { await db.prepare('DELETE FROM course_reviews WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_progress WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(review.course_id).run(); } catch (_) {}
+          await db.prepare('DELETE FROM courses WHERE id = ?').bind(review.course_id).run();
+        } else {
+          await db.prepare("UPDATE courses SET approval_status = 'approved', is_published = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(review.course_id).run();
+        }
 
         // Notify Creator of Approval
         try {
@@ -2556,10 +2567,43 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       `).bind(courseId, currentUser.id).all();
 
       const systemPrompt = `Eres el Asistente Experto en Creación y Estructuración Pedagógica de Cursos para StudyPlatform.
-Estás ayudando al instructor a diseñar contenido interactivo de alta calidad para el curso "${course?.title || 'Curso'}".
-Capacidades soportadas en StudyPlatform:
-- Bloques interactivos: text (Markdown), heading, code (con lenguaje), info (tip/warning/danger/info), question_choice (opción múltiple o checkboxes), question_free (respuesta abierta), quiz (evaluación), table (tablas Markdown), diagram (diagramas Mermaid.js), math (fórmulas LaTeX), tabs (pestañas de código/explicación), accordion (acordeones desplegables), stepper (paso a paso), resource (descargables), database_modeler (esquemas ER).
-- Formato pedagógico: Explica conceptos claramente, ofrece sugerencias estructuradas y cuando generes bloques o lecciones, entrégalos en código JSON válido o Markdown formateado y limpio sin incluir datos de autoría.`;
+Estás asesorando al docente o creador de contenido en el curso "${course?.title || 'Curso'}".
+
+REGLA FUNDAMENTAL DE SEGURIDAD Y CONTROL:
+- NUNCA apliques cambios directamente sobre la base de datos sin autorización.
+- Siempre presenta tus propuestas estructuradas como bloques JSON o código Markdown para que el usuario las revise, acepte, edite o rechace antes de insertarlas en el temario.
+
+CATÁLOGO COMPLETO DE BLOQUES VÁLIDOS EN STUDYPLATFORM (Esquema Zod estricto):
+1. "heading": { "type": "heading", "id": "h1", "level": 1|2|3|4, "content": "Título" }
+2. "text": { "type": "text", "id": "t1", "content": "Markdown con negrita, listas, fórmulas KaTeX inline $x$" }
+3. "code": { "type": "code", "id": "c1", "language": "java"|"python"|"sql"|"typescript", "code": "...", "copyable": true }
+4. "diagram": { "type": "diagram", "id": "d1", "title": "...", "syntax": "graph TD\\n A[Inicio] --> B[Fin]", "caption": "..." }
+5. "math": { "type": "math", "id": "m1", "title": "...", "expression": "f(x) = \\int a \\cdot dx", "explanation": "..." }
+6. "table": { "type": "table", "id": "tb1", "title": "...", "headers": ["Col1", "Col2"], "rows": [["A", "B"]] }
+7. "tabs": { "type": "tabs", "id": "tab1", "title": "...", "tabs": [{ "id": "t1", "label": "Java", "language": "java", "content": "..." }] }
+8. "accordion": { "type": "accordion", "id": "acc1", "title": "Pista", "content": "...", "defaultOpen": false }
+9. "stepper": { "type": "stepper", "id": "step1", "title": "...", "steps": [{ "title": "Paso 1", "description": "...", "code": "..." }] }
+10. "info": { "type": "info", "id": "i1", "level": "tip"|"info"|"warning"|"danger", "title": "...", "message": "..." }
+11. "question_choice": { "type": "question_choice", "id": "q1", "question": "...", "multiple": false, "options": [{ "id": "o1", "text": "...", "isCorrect": true }], "explanation": "..." }
+12. "question_free": { "type": "question_free", "id": "qf1", "question": "...", "expectedAnswer": "...", "hint": "..." }
+13. "quiz": { "type": "quiz", "id": "qz1", "title": "...", "passingScore": 70, "questions": [...] }
+14. "database_modeler": { "type": "database_modeler", "id": "db1", "title": "...", "instructions": "...", "scenario": "...", "initialEntities": [...], "expectedModel": { "entities": [...], "relationships": [...] } }
+15. "resource": { "type": "resource", "id": "r1", "title": "...", "url": "https://...", "fileType": "pdf"|"zip"|"sql" }
+
+ESTRUCTURA DE LECCIÓN COMPLETA:
+{
+  "version": "1.0",
+  "lesson": {
+    "id": "leccion-id",
+    "title": "...",
+    "description": "...",
+    "order": 1,
+    "estimatedMinutes": 15,
+    "blocks": [ ...bloques... ]
+  }
+}
+
+Explica con claridad pedagógica, entrega siempre bloques de código bien formateados e incluye sugerencias accionables para que el usuario las revise antes de aplicar.`;
 
       let aiResponseText = '';
 

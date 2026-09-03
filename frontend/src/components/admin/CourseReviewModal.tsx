@@ -15,7 +15,7 @@ import {
   MinusCircle,
 } from 'lucide-react';
 import { apiFetch } from '../../api/client';
-import { CourseReview, CourseSnapshot } from '../../types';
+import { CourseReview } from '../../types';
 import { Button } from '../shared/Button';
 import { Badge } from '../shared/Badge';
 
@@ -99,20 +99,32 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
     return r.status === filter;
   });
 
-  const calculateDiff = (proposed?: CourseSnapshot | null, current?: CourseSnapshot | null) => {
+  const calculateDiff = (proposed?: any | null, current?: any | null) => {
     if (!proposed) return null;
+    const isDeletion = selectedReview?.reviewType === 'deletion';
+    if (isDeletion) {
+      return {
+        isNew: false,
+        isDeletion: true,
+        isMetaModified: false,
+        addedLessons: [],
+        deletedLessons: [],
+        modifiedLessons: [],
+        totalChanges: 1,
+      };
+    }
     const isNew = !current;
 
     const proposedLessons = proposed.lessons || [];
     const currentLessons = current?.lessons || [];
 
-    const currentMap = new Map(currentLessons.map((l) => [l.id, l]));
-    const proposedMap = new Map(proposedLessons.map((l) => [l.id, l]));
+    const currentMap = new Map(currentLessons.map((l: any) => [l.id, l]));
+    const proposedMap = new Map(proposedLessons.map((l: any) => [l.id, l]));
 
-    const addedLessons = proposedLessons.filter((l) => !currentMap.has(l.id));
-    const deletedLessons = currentLessons.filter((l) => !proposedMap.has(l.id));
-    const modifiedLessons = proposedLessons.filter((l) => {
-      const c = currentMap.get(l.id);
+    const addedLessons = proposedLessons.filter((l: any) => !currentMap.has(l.id));
+    const deletedLessons = currentLessons.filter((l: any) => !proposedMap.has(l.id));
+    const modifiedLessons = proposedLessons.filter((l: any) => {
+      const c: any = currentMap.get(l.id);
       if (!c) return false;
       return (
         c.title !== l.title ||
@@ -122,15 +134,20 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
       );
     });
 
+    const proposedCourse = proposed.course || proposed;
+    const currentCourse = current?.course || current;
+
     const isMetaModified =
-      current &&
-      (current.course.title !== proposed.course.title ||
-        current.course.description !== proposed.course.description ||
-        current.course.thumbnailUrl !== proposed.course.thumbnailUrl ||
-        current.course.sequentialUnlock !== proposed.course.sequentialUnlock);
+      Boolean(currentCourse &&
+      proposedCourse &&
+      (currentCourse.title !== proposedCourse.title ||
+        currentCourse.description !== proposedCourse.description ||
+        currentCourse.thumbnailUrl !== proposedCourse.thumbnailUrl ||
+        currentCourse.sequentialUnlock !== proposedCourse.sequentialUnlock));
 
     return {
       isNew,
+      isDeletion: false,
       isMetaModified,
       addedLessons,
       deletedLessons,
@@ -276,10 +293,18 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                       </h3>
                       <Badge
                         variant={
-                          selectedReview.reviewType === 'new_course' ? 'primary' : 'warning'
+                          selectedReview.reviewType === 'deletion'
+                            ? 'error'
+                            : selectedReview.reviewType === 'new_course'
+                            ? 'primary'
+                            : 'warning'
                         }
                       >
-                        {selectedReview.reviewType === 'new_course' ? '🌱 NUEVO CURSO' : '🔄 ACTUALIZACIÓN'}
+                        {selectedReview.reviewType === 'deletion'
+                          ? '🗑️ SOLICITUD DE ELIMINACIÓN'
+                          : selectedReview.reviewType === 'new_course'
+                          ? '🌱 NUEVO CURSO'
+                          : '🔄 ACTUALIZACIÓN'}
                       </Badge>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
@@ -296,9 +321,13 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                         disabled={isDeciding}
                         onClick={() => handleDecision('approved')}
                         leftIcon={<Check className="w-3.5 h-3.5" />}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        className={
+                          selectedReview.reviewType === 'deletion'
+                            ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }
                       >
-                        Aprobar y Publicar
+                        {selectedReview.reviewType === 'deletion' ? 'Aprobar Eliminación' : 'Aprobar y Publicar'}
                       </Button>
                     )}
                     {selectedReview.status !== 'rejected' && (
@@ -310,7 +339,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                         leftIcon={<XCircle className="w-3.5 h-3.5" />}
                         className="text-rose-600 hover:text-rose-700"
                       >
-                        Rechazar
+                        {selectedReview.reviewType === 'deletion' ? 'Rechazar Solicitud' : 'Rechazar'}
                       </Button>
                     )}
                   </div>
@@ -370,17 +399,33 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                       <span>Detalle de Diferencias en el Temario</span>
                     </h4>
 
-                    {diffData?.isNew ? (
+                    {diffData?.isDeletion ? (
+                      <div className="p-6 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-3">
+                        <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold text-sm">
+                          <AlertCircle className="w-5 h-5" />
+                          <span>Solicitud de Retiro y Eliminación Definitiva</span>
+                        </div>
+                        <p className="text-xs text-rose-900 dark:text-rose-100 leading-relaxed">
+                          El creador <strong>{selectedReview.creatorName}</strong> ({selectedReview.creatorEmail}) ha solicitado eliminar permanentemente este curso de la plataforma StudyPlatform.
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Motivo / Nota del autor: <em>"{selectedReview.adminFeedback || 'Solicitud de eliminación por el creador'}"</em>
+                        </p>
+                        <div className="p-3 rounded-xl bg-white dark:bg-[#1E1E1E] border border-rose-100 dark:border-rose-950/50 text-xs text-gray-600 dark:text-gray-300">
+                          ⚠️ Al hacer clic en <strong>"Aprobar Eliminación"</strong>, el curso, módulos y lecciones asociadas serán borrados de la base de datos de producción.
+                        </div>
+                      </div>
+                    ) : diffData?.isNew ? (
                       <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 space-y-2">
                         <div className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
                           <CheckCircle2 className="w-4 h-4" />
                           <span>Curso Nuevo Completo ({selectedReview.proposedData?.lessons?.length || 0} Lecciones)</span>
                         </div>
                         <p className="text-gray-600 dark:text-gray-400">
-                          {selectedReview.proposedData?.course?.description}
+                          {selectedReview.proposedData?.course?.description || selectedReview.proposedData?.description}
                         </p>
                         <div className="space-y-1.5 pt-2">
-                          {selectedReview.proposedData?.lessons?.map((l, i) => (
+                          {selectedReview.proposedData?.lessons?.map((l: any, i: number) => (
                             <div key={l.id} className="p-2.5 rounded-xl bg-white dark:bg-[#202020] border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-between">
                               <span className="font-medium text-gray-800 dark:text-gray-200">
                                 {i + 1}. {l.title}
@@ -394,7 +439,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                       /* Diff for updates */
                       <div className="space-y-2">
                         {/* Added Lessons */}
-                        {diffData?.addedLessons.map((l) => (
+                        {diffData?.addedLessons.map((l: any) => (
                           <div key={l.id} className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <PlusCircle className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -405,7 +450,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                         ))}
 
                         {/* Modified Lessons with expandable Block Viewer */}
-                        {diffData?.modifiedLessons.map((l) => {
+                        {diffData?.modifiedLessons.map((l: any) => {
                           const isExpanded = expandedLessonId === l.id;
                           return (
                             <div key={l.id} className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
@@ -444,7 +489,7 @@ export const CourseReviewModal: React.FC<CourseReviewModalProps> = ({
                         })}
 
                         {/* Deleted Lessons */}
-                        {diffData?.deletedLessons.map((l) => (
+                        {diffData?.deletedLessons.map((l: any) => (
                           <div key={l.id} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <MinusCircle className="w-4 h-4 text-rose-600 shrink-0" />

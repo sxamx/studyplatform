@@ -221,25 +221,32 @@ export const MarketplacePage: React.FC = () => {
               }`}
             >
               <div className="space-y-4">
-                {course.thumbnailUrl && (
-                  <div className="relative h-44 -mx-6 -mt-6 overflow-hidden bg-gray-100 dark:bg-[#141414]">
+                <div className="relative h-44 -mx-6 -mt-6 overflow-hidden bg-gray-100 dark:bg-[#141414] shrink-0">
+                  {course.thumbnailUrl ? (
                     <img
                       src={course.thumbnailUrl}
                       alt={course.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                      {course.isEnrolled && (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white shadow-md">
-                          Inscrito
-                        </span>
-                      )}
-                      <Badge variant={course.price === 0 ? 'success' : 'primary'}>
-                        {course.price === 0 ? 'Gratis' : `$${course.price.toFixed(2)} ${course.currency}`}
-                      </Badge>
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#0066CC] via-[#2563EB] to-[#4F46E5] dark:from-[#0B2545] dark:via-[#133C55] dark:to-[#1E3A8A] flex flex-col items-center justify-center text-white p-4 text-center select-none">
+                      <BookOpen className="w-8 h-8 mb-2 opacity-80" />
+                      <span className="font-black text-sm tracking-tight line-clamp-1 opacity-90">
+                        {course.title}
+                      </span>
                     </div>
+                  )}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    {course.isEnrolled && (
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white shadow-md">
+                        Inscrito
+                      </span>
+                    )}
+                    <Badge variant={course.price === 0 ? 'success' : 'primary'}>
+                      {course.price === 0 ? 'Gratis' : `$${course.price.toFixed(2)} ${course.currency}`}
+                    </Badge>
                   </div>
-                )}
+                </div>
 
                 <div className="pt-2">
                   <div className="flex items-center justify-between text-xs text-gray-400 mb-2">

@@ -305,23 +305,35 @@ export const DashboardPage: React.FC = () => {
                 key={course.id}
                 className="overflow-hidden flex flex-col justify-between hover:border-[#0066CC] dark:hover:border-[#4D94FF] transition group"
               >
-                <div className="p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <span className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-[#0066CC] dark:text-[#4D94FF]">
-                      <BookOpen className="w-5 h-5" />
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {course.totalModules && course.totalModules > 0 ? (
-                        <Badge variant="primary" size="sm">
-                          <Layers className="w-3 h-3 mr-1 inline" /> {course.totalModules} Módulos
-                        </Badge>
-                      ) : null}
-                      <Badge variant={course.progressPercent === 100 ? 'success' : 'secondary'} size="sm">
-                        {course.totalLessons} Lecciones
-                      </Badge>
+                {/* Course Thumbnail or Modern Gradient Banner */}
+                <div className="relative h-44 -mx-6 -mt-6 overflow-hidden bg-gray-100 dark:bg-[#141414] shrink-0">
+                  {course.thumbnailUrl ? (
+                    <img
+                      src={course.thumbnailUrl}
+                      alt={course.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#0066CC] via-[#2563EB] to-[#4F46E5] dark:from-[#0B2545] dark:via-[#133C55] dark:to-[#1E3A8A] flex flex-col items-center justify-center text-white p-4 text-center select-none">
+                      <BookOpen className="w-8 h-8 mb-2 opacity-80" />
+                      <span className="font-black text-sm tracking-tight line-clamp-1 opacity-90">
+                        {course.title}
+                      </span>
                     </div>
+                  )}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    {course.totalModules && course.totalModules > 0 ? (
+                      <Badge variant="primary" size="sm">
+                        <Layers className="w-3 h-3 mr-1 inline" /> {course.totalModules} Módulos
+                      </Badge>
+                    ) : null}
+                    <Badge variant={course.progressPercent === 100 ? 'success' : 'secondary'} size="sm">
+                      {course.totalLessons} Lecciones
+                    </Badge>
                   </div>
+                </div>
 
+                <div className="p-6 pt-4 space-y-4 flex-1 flex flex-col justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-[#1A1A1A] dark:text-white group-hover:text-[#0066CC] dark:group-hover:text-[#4D94FF] transition">
                       {course.title}

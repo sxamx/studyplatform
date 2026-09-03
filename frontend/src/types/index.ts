@@ -380,10 +380,10 @@ export interface CourseReview {
   creatorId: string;
   creatorName?: string;
   creatorEmail?: string;
-  reviewType: 'new_course' | 'course_update';
+  reviewType: 'new_course' | 'course_update' | 'deletion';
   status: 'pending' | 'approved' | 'rejected';
-  proposedData: CourseSnapshot;
-  currentData?: CourseSnapshot | null;
+  proposedData: any;
+  currentData?: any | null;
   adminFeedback?: string;
   createdAt: string;
   updatedAt?: string;
