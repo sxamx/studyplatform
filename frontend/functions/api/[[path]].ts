@@ -291,13 +291,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // -------------------------------------------------------------
     try {
       await db.prepare(`
-        CREATE TABLE IF NOT EXISTS creators (
+        CREATE TABLE IF NOT EXISTS creator_badges (
           user_id TEXT PRIMARY KEY,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `).run();
       await db.prepare(`
-        INSERT OR IGNORE INTO creators (user_id)
+        INSERT OR IGNORE INTO creator_badges (user_id)
         SELECT user_id FROM creator_applications WHERE status = 'approved'
       `).run();
     } catch (_) {}
@@ -361,7 +361,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       } else {
         let effRole = userCheck.role;
         if (effRole === 'USER') {
-          const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(currentUser.id).first();
+          const isCr = await db.prepare('SELECT 1 FROM creator_badges WHERE user_id = ?').bind(currentUser.id).first();
           if (isCr) effRole = 'CREATOR';
         }
         currentUser.role = effRole;
@@ -416,7 +416,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       let effRole = user.role;
       if (effRole === 'USER') {
-        const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(user.id).first();
+        const isCr = await db.prepare('SELECT 1 FROM creator_badges WHERE user_id = ?').bind(user.id).first();
         if (isCr) effRole = 'CREATOR';
       }
 
@@ -441,7 +441,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       let effRole = user.role;
       if (effRole === 'USER') {
-        const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(user.id).first();
+        const isCr = await db.prepare('SELECT 1 FROM creator_badges WHERE user_id = ?').bind(user.id).first();
         if (isCr) effRole = 'CREATOR';
       }
 
@@ -1491,7 +1491,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           (SELECT COUNT(l.id) FROM lessons l WHERE l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as totalEnrolledLessons,
           (SELECT COUNT(DISTINCT up.lesson_id) FROM user_progress up JOIN lessons l ON l.id = up.lesson_id WHERE up.user_id = u.id AND up.completed = 1 AND l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as completedLessons
         FROM users u
-        LEFT JOIN creators c ON u.id = c.user_id
+        LEFT JOIN creator_badges c ON u.id = c.user_id
         ORDER BY u.created_at DESC
       `).all();
       return json({ users: usersRes.results || [] });
@@ -1514,13 +1514,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       }
 
       if (newRole === 'CREATOR') {
-        await db.prepare('INSERT OR REPLACE INTO creators (user_id) VALUES (?)').bind(targetUserId).run();
+        await db.prepare('INSERT OR REPLACE INTO creator_badges (user_id) VALUES (?)').bind(targetUserId).run();
         try { await db.prepare('UPDATE users SET role = "USER", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run(); } catch (_) {}
       } else if (newRole === 'ADMIN') {
-        await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run();
+        await db.prepare('DELETE FROM creator_badges WHERE user_id = ?').bind(targetUserId).run();
         await db.prepare('UPDATE users SET role = "ADMIN", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run();
       } else if (newRole === 'USER') {
-        await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run();
+        await db.prepare('DELETE FROM creator_badges WHERE user_id = ?').bind(targetUserId).run();
         await db.prepare('UPDATE users SET role = "USER", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run();
       }
 
@@ -1583,7 +1583,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       }
 
       // Cleanup user dependencies
-      try { await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM creator_badges WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM creator_applications WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM course_collaborators WHERE user_id = ? OR invited_by = ?').bind(targetUserId, targetUserId).run(); } catch (_) {}
       await db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId).run();
@@ -1861,7 +1861,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       if (status === 'approved') {
         const targetUser = await db.prepare('SELECT role FROM users WHERE id = ?').bind(app.user_id).first() as any;
         if (targetUser && targetUser.role !== 'ADMIN') {
-          await db.prepare("UPDATE users SET role = 'CREATOR' WHERE id = ?").bind(app.user_id).run();
+          await db.prepare('INSERT OR REPLACE INTO creator_badges (user_id) VALUES (?)').bind(app.user_id).run();
         }
       }
 
@@ -2066,7 +2066,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       // If user accepted and was 'USER', ensure their role is at least 'CREATOR'
       if (accept && currentUser.role === 'USER') {
-        await db.prepare("UPDATE users SET role = 'CREATOR' WHERE id = ?").bind(currentUser.id).run();
+        await db.prepare('INSERT OR REPLACE INTO creator_badges (user_id) VALUES (?)').bind(currentUser.id).run();
         currentUser.role = 'CREATOR';
       }
 
