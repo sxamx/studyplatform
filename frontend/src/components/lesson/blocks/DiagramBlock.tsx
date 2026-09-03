@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
 import { DiagramBlock as IDiagramBlock } from '../../../types';
 import { AlertCircle } from 'lucide-react';
+import { useThemeStore } from '../../../stores/themeStore';
 
 interface DiagramBlockProps {
   block: IDiagramBlock;
@@ -35,24 +36,25 @@ export const DiagramBlock: React.FC<DiagramBlockProps> = ({ block }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgHtml, setSvgHtml] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const theme = useThemeStore((s) => s.theme);
 
   useEffect(() => {
     let isMounted = true;
+    const uniqueId = `mermaid-${block.id.replace(/[^a-zA-Z0-9_-]/g, '')}-${Math.random().toString(36).substring(2, 9)}`;
 
     const renderDiagram = async () => {
       try {
         setError(null);
-        const isDark = document.documentElement.classList.contains('dark');
+        const isDark = theme === 'dark' || document.documentElement.classList.contains('dark');
 
         mermaid.initialize({
           startOnLoad: false,
           theme: isDark ? 'dark' : 'neutral',
-          securityLevel: 'loose',
+          securityLevel: 'strict',
           fontFamily: 'inherit',
           fontSize: 13,
         });
 
-        const uniqueId = `mermaid-${block.id}-${Math.random().toString(36).substring(2, 9)}`;
         const cleanSyntax = sanitizeMermaidSyntax(block.syntax || '');
 
         if (!cleanSyntax) {
@@ -69,6 +71,10 @@ export const DiagramBlock: React.FC<DiagramBlockProps> = ({ block }) => {
           console.warn('Mermaid render error:', err);
           setError(err?.message || 'Error al compilar diagrama visual.');
         }
+      } finally {
+        // Remove any temporary elements created by mermaid on failure
+        const orphan = document.getElementById(uniqueId) || document.getElementById(`d${uniqueId}`);
+        if (orphan) orphan.remove();
       }
     };
 
@@ -76,8 +82,10 @@ export const DiagramBlock: React.FC<DiagramBlockProps> = ({ block }) => {
 
     return () => {
       isMounted = false;
+      const orphan = document.getElementById(uniqueId) || document.getElementById(`d${uniqueId}`);
+      if (orphan) orphan.remove();
     };
-  }, [block.syntax, block.id]);
+  }, [block.syntax, block.id, theme]);
 
   return (
     <div className="my-6 space-y-2">

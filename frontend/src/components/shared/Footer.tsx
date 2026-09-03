@@ -6,7 +6,7 @@ import { GithubIcon, DiscordIcon } from './SocialIcons';
 export const Footer: React.FC = () => {
   return (
     <footer className="mt-auto border-t border-[#E0E0E0] dark:border-[#2D2D2D] bg-white dark:bg-[#0F0F0F] text-[#1A1A1A] dark:text-white transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-16 md:py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 md:py-8">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo & Description */}
           <div className="flex flex-col items-center md:items-start text-center md:text-left space-y-2">

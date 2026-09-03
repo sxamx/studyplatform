@@ -119,7 +119,7 @@ export const NotificationDropdown: React.FC = () => {
           if (!isOpen) loadNotifications();
         }}
         title="Notificaciones"
-        className="relative p-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#242424] transition-colors"
+        className="relative min-w-[40px] min-h-[40px] p-2 flex items-center justify-center rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#242424] transition-colors"
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
@@ -132,7 +132,7 @@ export const NotificationDropdown: React.FC = () => {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#161616] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl shadow-2xl overflow-hidden z-50 animate-fadeIn text-xs">
+        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:mt-2 sm:w-96 bg-white dark:bg-[#161616] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl shadow-2xl overflow-hidden z-50 animate-fadeIn text-xs">
           {/* Header */}
           <div className="p-3.5 border-b border-[#E0E0E0] dark:border-[#2D2D2D] flex items-center justify-between bg-gray-50/70 dark:bg-[#1E1E1E]">
             <div className="flex items-center gap-2">

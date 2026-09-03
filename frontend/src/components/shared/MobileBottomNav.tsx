@@ -18,7 +18,7 @@ export const MobileBottomNav: React.FC = () => {
         {/* Mis Cursos */}
         <Link
           to="/"
-          className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+          className={`flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-[11px] font-bold transition-all active:scale-95 select-none ${
             isActive('/')
               ? 'text-[#0066CC] dark:text-[#4D94FF] scale-105'
               : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -33,7 +33,7 @@ export const MobileBottomNav: React.FC = () => {
         {/* Marketplace */}
         <Link
           to="/marketplace"
-          className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+          className={`flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-[11px] font-bold transition-all active:scale-95 select-none ${
             isActive('/marketplace')
               ? 'text-[#0066CC] dark:text-[#4D94FF] scale-105'
               : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -49,7 +49,7 @@ export const MobileBottomNav: React.FC = () => {
         {user?.role === 'CREATOR' && (
           <Link
             to="/creator"
-            className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+            className={`flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-[11px] font-bold transition-all active:scale-95 select-none ${
               isActive('/creator')
                 ? 'text-[#0066CC] dark:text-[#4D94FF] scale-105'
                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -66,7 +66,7 @@ export const MobileBottomNav: React.FC = () => {
         {user?.role === 'ADMIN' && (
           <Link
             to="/admin"
-            className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+            className={`flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-[11px] font-bold transition-all active:scale-95 select-none ${
               isActive('/admin')
                 ? 'text-[#0066CC] dark:text-[#4D94FF] scale-105'
                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -83,7 +83,7 @@ export const MobileBottomNav: React.FC = () => {
         {user ? (
           <Link
             to={user.role === 'ADMIN' ? '/admin' : user.role === 'CREATOR' ? '/creator' : '/'}
-            className="flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all"
+            className="flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-[11px] font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all active:scale-95 select-none"
           >
             <div className="w-6 h-6 rounded-full bg-[#0066CC] text-white flex items-center justify-center text-[10px] font-black uppercase shadow-xs">
               {(user.fullName || user.email || 'U')[0]}
@@ -95,7 +95,7 @@ export const MobileBottomNav: React.FC = () => {
         ) : (
           <Link
             to="/login"
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-xs font-bold transition-all ${
+            className={`flex-1 min-h-[48px] flex flex-col items-center justify-center py-1 px-1 rounded-xl text-xs font-bold transition-all active:scale-95 select-none ${
               isActive('/login')
                 ? 'text-[#0066CC] dark:text-[#4D94FF]'
                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'

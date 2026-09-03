@@ -398,7 +398,75 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <Card className="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View (< sm) */}
+          <div className="sm:hidden divide-y divide-[#E0E0E0] dark:divide-[#2D2D2D]">
+            {courses.length > 0 ? (
+              courses.map((course) => (
+                <div key={course.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div
+                        onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
+                        className="font-bold text-sm text-[#1A1A1A] dark:text-white truncate cursor-pointer hover:text-[#0066CC] dark:hover:text-[#4D94FF]"
+                      >
+                        {course.title}
+                      </div>
+                      <p className="text-xs text-[#666666] dark:text-[#808080] line-clamp-2 mt-0.5">
+                        {course.description}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePublish(course)}
+                      className="shrink-0"
+                    >
+                      <Badge variant={course.isPublished ? 'success' : 'secondary'}>
+                        {course.isPublished ? 'Publicado' : 'Borrador'}
+                      </Badge>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800 text-xs">
+                    <span className="text-gray-500 font-semibold">{course.totalLessons} lecciones</span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="min-h-[36px] px-3 text-xs"
+                        onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
+                        leftIcon={<Layers className="w-3.5 h-3.5 text-[#0066CC]" />}
+                      >
+                        Temario
+                      </Button>
+                      <button
+                        className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        onClick={() => {
+                          setEditingCourse(course);
+                          setIsModalOpen(true);
+                        }}
+                        title="Editar Ajustes"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                        onClick={() => handleDeleteCourse(course.id)}
+                        title="Eliminar Curso"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-6 text-center text-xs text-gray-400">
+                No hay cursos registrados. Crea uno con el botón "Nuevo Curso".
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table (>= sm) */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[#F5F5F5] dark:bg-[#242424] border-b border-[#E0E0E0] dark:border-[#2D2D2D] text-xs font-bold uppercase tracking-wider text-[#666666] dark:text-[#B0B0B0]">
                 <tr>
@@ -497,7 +565,95 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <Card className="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Users View (< md) */}
+          <div className="md:hidden divide-y divide-[#E0E0E0] dark:divide-[#2D2D2D]">
+            {users.map((u) => {
+              const isSuspended = Boolean(u.isSuspended);
+              const isAdmin = u.role === 'ADMIN';
+              const aiDailyLimit = u.aiDailyLimit || 20;
+
+              return (
+                <div key={u.id} className={`p-4 space-y-3 ${isSuspended ? 'opacity-70 bg-rose-50/20' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-[#1A1A1A] dark:text-white flex items-center gap-1.5">
+                        <span>{u.fullName || 'Usuario'}</span>
+                        {isAdmin && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            👑 Admin
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-[#666666] dark:text-[#808080] font-mono block mt-0.5">{u.email}</span>
+                    </div>
+                    <Badge variant={isSuspended ? 'error' : 'success'}>
+                      {isSuspended ? 'Suspendido' : 'Activo'}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-gray-100 dark:border-gray-800">
+                    <div>
+                      <span className="text-[10px] text-gray-400 block font-bold uppercase">Rol</span>
+                      {isAdmin ? (
+                        <span className="font-bold text-[#0066CC] dark:text-[#4D94FF]">ADMIN</span>
+                      ) : (
+                        <select
+                          value={u.role}
+                          onChange={(e) => handleChangeUserRole(u.id, e.target.value)}
+                          className="text-xs font-semibold mt-1 px-2 py-1 rounded-lg border border-[#E0E0E0] dark:border-[#333] bg-white dark:bg-[#202020] text-[#1A1A1A] dark:text-white w-full"
+                        >
+                          <option value="USER">Estudiante</option>
+                          <option value="CREATOR">Creador</option>
+                          <option value="ADMIN">Admin</option>
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-400 block font-bold uppercase">Copiloto IA</span>
+                      {isAdmin ? (
+                        <span className="font-bold text-purple-600 dark:text-purple-400 mt-1 block">Ilimitado</span>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleAIAccess(u.id, Boolean(u.canUseAi), aiDailyLimit)}
+                          className="mt-1 text-xs font-semibold text-purple-600 dark:text-purple-400 underline block"
+                        >
+                          {u.canUseAi ? `Activo (${aiDailyLimit}/d)` : 'Desactivado'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-gray-400">
+                      {formatLastActive(u.lastActiveAt || u.lastLoginAt || u.createdAt)}
+                    </span>
+                    {!isAdmin && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant={isSuspended ? 'primary' : 'outline'}
+                          size="sm"
+                          className="min-h-[36px] text-xs"
+                          onClick={() => handleToggleSuspendUser(u.id, isSuspended)}
+                        >
+                          {isSuspended ? 'Reactivar' : 'Suspender'}
+                        </Button>
+                        <button
+                          className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                          onClick={() => handleDeleteUser(u.id, u.email, u.role)}
+                          title="Eliminar Cuenta"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table (>= md) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-[#F5F5F5] dark:bg-[#242424] border-b border-[#E0E0E0] dark:border-[#2D2D2D] text-xs font-bold uppercase tracking-wider text-[#666666] dark:text-[#B0B0B0]">
                 <tr>

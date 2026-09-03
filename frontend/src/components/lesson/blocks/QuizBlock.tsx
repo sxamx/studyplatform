@@ -5,16 +5,33 @@ import { Button } from '../../shared/Button';
 
 interface QuizBlockProps {
   block: IQuizBlock;
+  savedAnswer?: any;
   onQuizComplete?: (score: number, passed: boolean) => void;
 }
 
-export const QuizBlock: React.FC<QuizBlockProps> = ({ block, onQuizComplete }) => {
+export const QuizBlock: React.FC<QuizBlockProps> = ({ block, savedAnswer, onQuizComplete }) => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [isFinished, setIsFinished] = useState(false);
+  const [isFinished, setIsFinished] = useState(Boolean(savedAnswer?.passed || (savedAnswer?.score !== undefined && savedAnswer?.score >= (block.passingScore || 70))));
+  const [persistedScore, setPersistedScore] = useState<number | null>(savedAnswer?.score !== undefined ? Number(savedAnswer.score) : null);
 
-  const currentQ = block.questions[currentIdx];
+  React.useEffect(() => {
+    if (savedAnswer?.passed || savedAnswer?.score !== undefined) {
+      setIsFinished(Boolean(savedAnswer?.passed || savedAnswer?.score >= (block.passingScore || 70)));
+      setPersistedScore(Number(savedAnswer.score || 100));
+    }
+  }, [savedAnswer, block.passingScore]);
+
+  if (!block.questions || block.questions.length === 0) {
+    return (
+      <div className="my-6 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 text-center text-sm text-gray-400">
+        Este cuestionario no contiene preguntas configuradas aún.
+      </div>
+    );
+  }
+
+  const currentQ = block.questions[currentIdx] || block.questions[0];
   const totalQuestions = block.questions.length;
   const passingScore = block.passingScore || 70;
 
@@ -44,6 +61,7 @@ export const QuizBlock: React.FC<QuizBlockProps> = ({ block, onQuizComplete }) =
       const finalPercentage = Math.round((correctCount / totalQuestions) * 100);
       const passed = finalPercentage >= passingScore;
       setIsFinished(true);
+      setPersistedScore(finalPercentage);
       if (onQuizComplete) {
         onQuizComplete(finalPercentage, passed);
       }
@@ -55,6 +73,7 @@ export const QuizBlock: React.FC<QuizBlockProps> = ({ block, onQuizComplete }) =
     setAnswers({});
     setSelectedOption(null);
     setIsFinished(false);
+    setPersistedScore(null);
   };
 
   // Calculate final results if finished
@@ -68,7 +87,7 @@ export const QuizBlock: React.FC<QuizBlockProps> = ({ block, onQuizComplete }) =
       }
     });
   }
-  const scorePercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+  const scorePercent = persistedScore !== null ? persistedScore : (totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0);
   const passed = scorePercent >= passingScore;
 
   return (

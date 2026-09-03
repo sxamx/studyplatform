@@ -92,6 +92,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
         return (
           <QuizBlock
             block={block}
+            savedAnswer={savedAnswer}
             onQuizComplete={(score, passed) => onAnswerChange?.(block.id, { score, passed }, passed)}
           />
         );

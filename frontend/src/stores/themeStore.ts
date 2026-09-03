@@ -30,6 +30,13 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     } else {
       document.documentElement.classList.remove('dark');
     }
+    
+    // Sync mobile browser status bar
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', theme === 'dark' ? '#0F0F0F' : '#0066CC');
+    }
+
     set({ theme });
 
     // Sync to backend if logged in

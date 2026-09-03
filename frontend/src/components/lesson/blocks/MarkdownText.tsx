@@ -81,12 +81,15 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, className =
       } else if (matchStr.startsWith('[')) {
         const linkMatch = matchStr.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
         if (linkMatch) {
+          const rawHref = linkMatch[2].trim();
+          const isSafeProtocol = /^(https?:\/\/|mailto:|\/|#)/i.test(rawHref);
+          const safeHref = isSafeProtocol ? rawHref : '#';
           tokens.push(
             <a
               key={match.index}
-              href={linkMatch[2]}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={safeHref}
+              target={safeHref.startsWith('http') ? '_blank' : undefined}
+              rel={safeHref.startsWith('http') ? 'noopener noreferrer' : undefined}
               className="text-[#0066CC] dark:text-[#4D94FF] underline font-semibold hover:opacity-80 transition-opacity"
             >
               {linkMatch[1]}
@@ -105,7 +108,12 @@ export const MarkdownText: React.FC<MarkdownTextProps> = ({ content, className =
     return tokens;
   };
 
-  const lines = content.split('\n');
+  // Normalize multiline block equations $$ ... $$ so they don't break across split('\n')
+  const normalizedContent = content.replace(/\$\$([\s\S]+?)\$\$/g, (_m, formula) => {
+    return `$$${formula.replace(/\n/g, ' ')}$$`;
+  });
+
+  const lines = normalizedContent.split('\n');
   const renderedBlocks: React.ReactNode[] = [];
   let currentListItems: string[] = [];
   let currentListType: 'ul' | 'ol' | null = null;

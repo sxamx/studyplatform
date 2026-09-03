@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { MathBlock as IMathBlock } from '../../../types';
 
 interface MathBlockProps {
@@ -12,9 +13,15 @@ export const MathBlock: React.FC<MathBlockProps> = ({ block }) => {
       return katex.renderToString(block.expression || '', {
         displayMode: !block.inline,
         throwOnError: false,
+        strict: false,
+        trust: false,
       });
-    } catch (err: any) {
-      return `<span class="text-rose-500 font-mono">${block.expression}</span>`;
+    } catch (_err: any) {
+      const safeText = (block.expression || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<span class="text-rose-500 font-mono">${safeText}</span>`;
     }
   }, [block.expression, block.inline]);
 

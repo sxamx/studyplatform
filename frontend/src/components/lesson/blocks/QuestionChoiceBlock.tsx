@@ -26,6 +26,14 @@ export const QuestionChoiceBlock: React.FC<QuestionChoiceBlockProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>(initialSelected());
   const [submitted, setSubmitted] = useState<boolean>(initialSelected().length > 0);
 
+  React.useEffect(() => {
+    if (savedAnswer !== undefined) {
+      const ids = Array.isArray(savedAnswer) ? savedAnswer : (typeof savedAnswer === 'string' && savedAnswer ? [savedAnswer] : []);
+      setSelectedIds(ids);
+      setSubmitted(ids.length > 0);
+    }
+  }, [savedAnswer]);
+
   const handleToggle = (id: string) => {
     if (submitted) return; // locked after check
 
@@ -116,7 +124,9 @@ export const QuestionChoiceBlock: React.FC<QuestionChoiceBlockProps> = ({
                     ? isSelected ? 'bg-[#0066CC] text-white' : 'bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] text-[#1A1A1A] dark:text-white'
                     : 'bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] text-[#1A1A1A] dark:text-white'
                 }`}>
-                  {isMultiple ? (isSelected ? '✓' : String.fromCharCode(65 + idx)) : String.fromCharCode(65 + idx)}
+                  {submitted
+                    ? (isSelected && !option.isCorrect ? '✕' : (option.isCorrect ? '✓' : String.fromCharCode(65 + idx)))
+                    : (isMultiple ? (isSelected ? '✓' : String.fromCharCode(65 + idx)) : String.fromCharCode(65 + idx))}
                 </span>
                 <span className="text-sm font-medium text-[#1A1A1A] dark:text-[#E0E0E0] flex-1">
                   <MarkdownText content={option.text} />

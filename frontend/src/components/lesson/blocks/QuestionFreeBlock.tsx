@@ -19,9 +19,17 @@ export const QuestionFreeBlock: React.FC<QuestionFreeBlockProps> = ({
   const [showHint, setShowHint] = useState<boolean>(false);
   const [showSolution, setShowSolution] = useState<boolean>(false);
 
-  const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+  React.useEffect(() => {
+    if (savedAnswer !== undefined) {
+      setAnswer(savedAnswer || '');
+      setSubmitted(Boolean(savedAnswer));
+    }
+  }, [savedAnswer]);
 
-  const isExactMatch = normalize(answer) === normalize(block.expectedAnswer);
+  const normalize = (str?: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  const hasExpected = Boolean(block.expectedAnswer?.trim());
+  const isExactMatch = hasExpected ? normalize(answer) === normalize(block.expectedAnswer) : true;
 
   const handleSubmit = () => {
     if (!answer.trim()) return;
@@ -34,6 +42,8 @@ export const QuestionFreeBlock: React.FC<QuestionFreeBlockProps> = ({
   const handleReset = () => {
     setSubmitted(false);
     setShowSolution(false);
+    setAnswer('');
+    onAnswerChange?.('', false);
   };
 
   return (
