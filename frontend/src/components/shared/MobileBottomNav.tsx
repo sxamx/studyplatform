@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, ShoppingBag, ShieldCheck, LogIn } from 'lucide-react';
+import { BookOpen, ShoppingBag, ShieldCheck, LogIn, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 
 export const MobileBottomNav: React.FC = () => {
@@ -45,6 +45,23 @@ export const MobileBottomNav: React.FC = () => {
           <span className="mt-0.5">Marketplace</span>
         </Link>
 
+        {/* Creator Panel (Visible for Creator) */}
+        {user?.role === 'CREATOR' && (
+          <Link
+            to="/creator"
+            className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
+              isActive('/creator')
+                ? 'text-[#0066CC] dark:text-[#4D94FF] scale-105'
+                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+            }`}
+          >
+            <div className={`p-1 rounded-lg ${isActive('/creator') ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400' : ''}`}>
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <span className="mt-0.5">Creador</span>
+          </Link>
+        )}
+
         {/* Admin Panel (Visible for Admin only) */}
         {user?.role === 'ADMIN' && (
           <Link
@@ -65,12 +82,8 @@ export const MobileBottomNav: React.FC = () => {
         {/* Account / Login Tab */}
         {user ? (
           <Link
-            to="/admin"
-            className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold transition-all ${
-              isActive('/admin') && user.role !== 'ADMIN'
-                ? 'text-[#0066CC] dark:text-[#4D94FF]'
-                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-            }`}
+            to={user.role === 'ADMIN' ? '/admin' : user.role === 'CREATOR' ? '/creator' : '/'}
+            className="flex flex-col items-center justify-center py-0.5 px-2 rounded-xl text-[11px] font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all"
           >
             <div className="w-6 h-6 rounded-full bg-[#0066CC] text-white flex items-center justify-center text-[10px] font-black uppercase shadow-xs">
               {(user.fullName || user.email || 'U')[0]}

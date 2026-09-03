@@ -13,6 +13,7 @@ import {
   Trash2,
   AlertCircle,
   RefreshCw,
+  Mail,
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { CreatorStats, Course } from '../types';
@@ -21,10 +22,13 @@ import { Button } from '../components/shared/Button';
 import { Badge } from '../components/shared/Badge';
 import { CourseModal } from '../components/admin/CourseModal';
 import { CourseAIChatDrawer } from '../components/creator/CourseAIChatDrawer';
+import { CollaboratorsModal } from '../components/admin/CollaboratorsModal';
 
 export const CreatorDashboardPage: React.FC = () => {
   const [stats, setStats] = useState<CreatorStats | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [invitations, setInvitations] = useState<any[]>([]);
+  const [collaboratorCourse, setCollaboratorCourse] = useState<{ id: string; title: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -36,9 +40,10 @@ export const CreatorDashboardPage: React.FC = () => {
     setIsLoading(true);
     setLoadError(null);
 
-    const [statsResult, coursesResult] = await Promise.allSettled([
+    const [statsResult, coursesResult, invsResult] = await Promise.allSettled([
       apiFetch<CreatorStats>('/creator/stats'),
       apiFetch<{ courses: Course[] }>('/creator/courses'),
+      apiFetch<{ invitations: any[] }>('/creator/invitations'),
     ]);
 
     if (statsResult.status === 'fulfilled') {
@@ -46,6 +51,9 @@ export const CreatorDashboardPage: React.FC = () => {
     }
     if (coursesResult.status === 'fulfilled') {
       setCourses(coursesResult.value.courses || []);
+    }
+    if (invsResult.status === 'fulfilled') {
+      setInvitations(invsResult.value.invitations || []);
     }
 
     if (statsResult.status === 'rejected' && coursesResult.status === 'rejected') {
@@ -59,6 +67,19 @@ export const CreatorDashboardPage: React.FC = () => {
     loadData();
   }, []);
 
+  const handleRespondInvitation = async (inviteId: string, accept: boolean) => {
+    try {
+      const res = await apiFetch<{ message: string }>(`/creator/invitations/${inviteId}/respond`, {
+        method: 'POST',
+        body: JSON.stringify({ accept }),
+      });
+      alert(res.message || 'Respuesta registrada');
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al responder invitación');
+    }
+  };
+
   const handleRequestReview = async (courseId: string) => {
     try {
       await apiFetch(`/creator/courses/${courseId}/request-review`, { method: 'POST' });
@@ -69,10 +90,11 @@ export const CreatorDashboardPage: React.FC = () => {
     }
   };
 
-  const handleDeleteCourse = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar este curso y todas sus lecciones?')) return;
+  const handleDeleteCourse = async (id: string, title?: string) => {
+    if (!window.confirm(`¿Estás seguro de solicitar la eliminación del curso "${title || 'este curso'}"?`)) return;
     try {
-      await apiFetch(`/courses/${id}`, { method: 'DELETE' });
+      const res = await apiFetch<{ message: string }>(`/courses/${id}`, { method: 'DELETE' });
+      alert(res.message || 'Curso eliminado exitosamente');
       loadData();
     } catch (err: any) {
       alert(err.message || 'Error al eliminar curso');
@@ -278,6 +300,34 @@ export const CreatorDashboardPage: React.FC = () => {
         </div>
       </Card>
 
+      {/* Pending Collaboration Invitations */}
+      {invitations.length > 0 && (
+        <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800 rounded-3xl space-y-3">
+          <div className="flex items-center gap-2 font-bold text-sm text-blue-900 dark:text-blue-200">
+            <Mail className="w-4 h-4 text-[#0066CC]" />
+            <span>Solicitudes para Co-Mantener Cursos ({invitations.length})</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {invitations.map((inv) => (
+              <div key={inv.id} className="p-3 bg-white dark:bg-[#202020] rounded-2xl border border-blue-100 dark:border-blue-900/50 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-bold text-xs text-[#1A1A1A] dark:text-white">{inv.courseTitle}</div>
+                  <div className="text-[11px] text-gray-500">Invitado por: <span className="font-semibold text-[#0066CC]">{inv.inviterName || inv.inviterEmail}</span></div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button size="sm" variant="primary" onClick={() => handleRespondInvitation(inv.id, true)} className="text-xs">
+                    Aceptar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRespondInvitation(inv.id, false)} className="text-xs">
+                    Rechazar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Creator Courses List */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -305,11 +355,18 @@ export const CreatorDashboardPage: React.FC = () => {
                   courses.map((course) => (
                     <tr key={course.id} className="hover:bg-[#F5F5F5]/40 dark:hover:bg-[#242424]/40 transition-colors">
                       <td className="px-6 py-4">
-                        <div
-                          onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
-                          className="font-bold text-[#1A1A1A] dark:text-white hover:text-[#0066CC] dark:hover:text-[#4D94FF] cursor-pointer transition-colors"
-                        >
-                          {course.title}
+                        <div className="flex items-center gap-2">
+                          <div
+                            onClick={() => navigate(`/admin/courses/${course.id}/curriculum`)}
+                            className="font-bold text-[#1A1A1A] dark:text-white hover:text-[#0066CC] dark:hover:text-[#4D94FF] cursor-pointer transition-colors"
+                          >
+                            {course.title}
+                          </div>
+                          {(course as any).collaborationRole === 'collaborator' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                              🤝 Co-Mantenedor
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-[#666666] dark:text-[#808080] line-clamp-1">
                           {course.description}
@@ -368,6 +425,15 @@ export const CreatorDashboardPage: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => setCollaboratorCourse({ id: course.id, title: course.title })}
+                          title="Gestionar Co-Mantenedores"
+                          className="text-blue-600 dark:text-blue-400"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => {
                             setEditingCourse(course);
                             setIsModalOpen(true);
@@ -380,7 +446,7 @@ export const CreatorDashboardPage: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           className="text-[#DC3545] hover:text-[#C82333]"
-                          onClick={() => handleDeleteCourse(course.id)}
+                          onClick={() => handleDeleteCourse(course.id, course.title)}
                           title="Eliminar Curso"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -408,6 +474,16 @@ export const CreatorDashboardPage: React.FC = () => {
         onSuccess={loadData}
         course={editingCourse}
       />
+
+      {/* Collaborators Modal */}
+      {collaboratorCourse && (
+        <CollaboratorsModal
+          isOpen={Boolean(collaboratorCourse)}
+          onClose={() => setCollaboratorCourse(null)}
+          courseId={collaboratorCourse.id}
+          courseTitle={collaboratorCourse.title}
+        />
+      )}
 
       {/* AI Copilot Drawer */}
       {aiChatCourse && (

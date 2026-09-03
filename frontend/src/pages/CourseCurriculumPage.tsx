@@ -14,6 +14,7 @@ import {
   FileCode,
   Clock,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { CourseDetail, Module, LessonSummary, LessonJSON } from '../types';
@@ -25,6 +26,7 @@ import { Input } from '../components/shared/Input';
 import { VisualLessonEditor } from '../components/admin/editor/VisualLessonEditor';
 import { AIPromptsModal } from '../components/admin/AIPromptsModal';
 import { CourseAIChatDrawer } from '../components/creator/CourseAIChatDrawer';
+import { CollaboratorsModal } from '../components/admin/CollaboratorsModal';
 
 export const CourseCurriculumPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +38,7 @@ export const CourseCurriculumPage: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
+  const [isCollaboratorsModalOpen, setIsCollaboratorsModalOpen] = useState(false);
 
   // Modals
   // 1. Module Modal (Create / Edit)
@@ -426,6 +429,14 @@ export const CourseCurriculumPage: React.FC = () => {
         </button>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCollaboratorsModalOpen(true)}
+            leftIcon={<Users className="w-3.5 h-3.5 text-[#0066CC]" />}
+          >
+            Colaboradores
+          </Button>
           <Button
             variant="primary"
             size="sm"
@@ -1036,6 +1047,16 @@ export const CourseCurriculumPage: React.FC = () => {
         <CourseAIChatDrawer
           isOpen={isAiDrawerOpen}
           onClose={() => setIsAiDrawerOpen(false)}
+          courseId={course.id}
+          courseTitle={course.title}
+        />
+      )}
+
+      {/* Collaborators Modal */}
+      {course && (
+        <CollaboratorsModal
+          isOpen={isCollaboratorsModalOpen}
+          onClose={() => setIsCollaboratorsModalOpen(false)}
           courseId={course.id}
           courseTitle={course.title}
         />

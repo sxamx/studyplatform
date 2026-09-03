@@ -14,6 +14,7 @@ import {
   FileText,
   AlertCircle,
   RefreshCw,
+  Cpu,
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { AdminStats, Course } from '../types';
@@ -25,6 +26,7 @@ import { AIPromptsModal } from '../components/admin/AIPromptsModal';
 import { AdminLogsModal } from '../components/admin/AdminLogsModal';
 import { CreatorApplicationsModal } from '../components/admin/CreatorApplicationsModal';
 import { CourseReviewModal } from '../components/admin/CourseReviewModal';
+import { AIConfigModal } from '../components/admin/AIConfigModal';
 import { Diff } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
@@ -37,6 +39,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isPromptsModalOpen, setIsPromptsModalOpen] = useState(false);
+  const [isAIConfigOpen, setIsAIConfigOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [isApplicationsModalOpen, setIsApplicationsModalOpen] = useState(false);
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
@@ -138,13 +141,36 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string, email: string) => {
-    if (!window.confirm(`⚠️ ACCIÓN CRÍTICA: ¿Estás seguro de eliminar permanentemente la cuenta (${email}) y todo su progreso?\n\nEsta acción no se puede deshacer.`)) return;
+  const handleDeleteUser = async (userId: string, email: string, role?: string) => {
+    let actionCourses = 'adopt';
+    if (role === 'CREATOR') {
+      const choice = window.prompt(
+        `⚠️ El usuario (${email}) es un Creador.\n¿Qué deseas hacer con sus cursos creados?\n\n1 = Adoptar cursos (El Administrador asume la autoría y los cursos siguen activos)\n2 = Eliminar definitivamente sus cursos y contenido\n\nIngresa 1 o 2:`,
+        '1'
+      );
+      if (choice === null) return;
+      actionCourses = choice === '2' ? 'delete' : 'adopt';
+    } else {
+      if (!window.confirm(`⚠️ ACCIÓN CRÍTICA: ¿Estás seguro de eliminar permanentemente la cuenta (${email}) y todo su progreso?\n\nEsta acción no se puede deshacer.`)) return;
+    }
+
     try {
-      await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
+      await apiFetch(`/admin/users/${userId}?actionCourses=${actionCourses}`, { method: 'DELETE' });
       loadData();
     } catch (err: any) {
       alert(err.message || 'Error al eliminar usuario');
+    }
+  };
+
+  const handleChangeUserRole = async (userId: string, newRole: string) => {
+    try {
+      await apiFetch(`/admin/users/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: newRole }),
+      });
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error al cambiar rol');
     }
   };
 
@@ -251,6 +277,15 @@ export const AdminDashboardPage: React.FC = () => {
             leftIcon={<Sparkles className="w-4 h-4 text-purple-500" />}
           >
             Prompts de IA
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsAIConfigOpen(true)}
+            leftIcon={<Cpu className="w-4 h-4 text-purple-500" />}
+          >
+            Configurar IA (BYOK)
           </Button>
 
           <Button
@@ -495,9 +530,19 @@ export const AdminDashboardPage: React.FC = () => {
                         <div className="text-xs text-[#666666] dark:text-[#808080] font-mono">{u.email}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge variant={isAdmin ? 'primary' : 'secondary'}>
-                          {u.role}
-                        </Badge>
+                        {isAdmin ? (
+                          <Badge variant="primary">ADMIN</Badge>
+                        ) : (
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleChangeUserRole(u.id, e.target.value)}
+                            className="text-xs font-semibold px-2 py-1 rounded-lg border border-[#E0E0E0] dark:border-[#333] bg-white dark:bg-[#202020] text-[#1A1A1A] dark:text-white focus:outline-none focus:border-[#0066CC] cursor-pointer"
+                          >
+                            <option value="USER">Estudiante (USER)</option>
+                            <option value="CREATOR">Creador (CREATOR)</option>
+                            <option value="ADMIN">Administrador (ADMIN)</option>
+                          </select>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <Badge variant={isSuspended ? 'error' : 'success'}>
@@ -569,7 +614,7 @@ export const AdminDashboardPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteUser(u.id, u.email)}
+                              onClick={() => handleDeleteUser(u.id, u.email, u.role)}
                               className="text-[#DC3545] hover:text-[#C82333]"
                               title="Eliminar Cuenta"
                             >
@@ -599,6 +644,12 @@ export const AdminDashboardPage: React.FC = () => {
       <AIPromptsModal
         isOpen={isPromptsModalOpen}
         onClose={() => setIsPromptsModalOpen(false)}
+      />
+
+      {/* Universal BYOK AI Config Modal */}
+      <AIConfigModal
+        isOpen={isAIConfigOpen}
+        onClose={() => setIsAIConfigOpen(false)}
       />
 
       {/* System Audit Logs Modal */}

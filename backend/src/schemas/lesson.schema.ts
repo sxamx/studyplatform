@@ -256,6 +256,18 @@ export const DatabaseModelerBlockSchema = z.object({
   required: z.boolean().default(true),
 });
 
+// 19. Document Block
+export const DocumentBlockSchema = z.object({
+  type: z.literal('document'),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  url: z.string().min(1),
+  description: z.string().optional(),
+  fileSize: z.string().optional(),
+  fileType: z.enum(['pdf', 'doc', 'sheet', 'slide', 'archive', 'link']).optional().default('pdf'),
+  downloadable: z.boolean().optional().default(true),
+});
+
 // Discriminated Union of all Blocks
 export const BlockSchema = z.discriminatedUnion('type', [
   TextBlockSchema,
@@ -263,6 +275,7 @@ export const BlockSchema = z.discriminatedUnion('type', [
   CodeBlockSchema,
   ImageBlockSchema,
   VideoBlockSchema,
+  DocumentBlockSchema,
   QuestionChoiceBlockSchema,
   QuestionFreeBlockSchema,
   QuizBlockSchema,

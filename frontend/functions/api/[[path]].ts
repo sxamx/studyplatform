@@ -351,8 +351,40 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       `).run();
     } catch (_) {}
 
+    try {
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS course_collaborators (
+          id VARCHAR(36) PRIMARY KEY,
+          course_id VARCHAR(36) NOT NULL,
+          user_id VARCHAR(36) NOT NULL,
+          role VARCHAR(20) DEFAULT 'editor',
+          status VARCHAR(20) DEFAULT 'pending',
+          invited_by VARCHAR(36) NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `).run();
+    } catch (_) {}
+
+    try {
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS system_ai_settings (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          provider VARCHAR(30) NOT NULL DEFAULT 'groq',
+          model_id VARCHAR(100) NOT NULL DEFAULT 'llama-3.3-70b-versatile',
+          api_key_encrypted TEXT NOT NULL DEFAULT '',
+          api_key_masked VARCHAR(25) NOT NULL DEFAULT '',
+          max_tokens INTEGER DEFAULT 1500,
+          temperature REAL DEFAULT 0.7,
+          is_active INTEGER DEFAULT 0,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run();
+    } catch (_) {}
+
     // -------------------------------------------------------------
-    // Global User Status & Suspension Check
+    // Global User Status & Suspension Check + Realtime Role Sync
     // -------------------------------------------------------------
     if (currentUser) {
       const userCheck = await db.prepare('SELECT id, is_suspended, is_active, role FROM users WHERE id = ?').bind(currentUser.id).first() as any;
@@ -360,6 +392,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         currentUser = null;
       } else if (userCheck.is_suspended === 1 || userCheck.is_active === 0) {
         return json({ error: 'Esta cuenta ha sido suspendida por el administrador.', isSuspended: true }, 403);
+      } else {
+        currentUser.role = userCheck.role;
       }
     }
 
@@ -701,16 +735,38 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/courses/') && method === 'DELETE') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       const courseId = path.replace('/courses/', '');
+      const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
+      if (!course) return json({ error: 'Curso no encontrado' }, 404);
 
-      // Cascade delete in D1
-      await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(courseId).run();
-      await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(courseId).run();
-      await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(courseId).run();
-      await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(courseId).run();
-      await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(courseId).run();
-      await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(courseId).run();
+      const isOwner = course.created_by && currentUser?.id === course.created_by;
+      const isAdmin = currentUser?.role === 'ADMIN';
+
+      if (!isAdmin && !isOwner) {
+        return json({ error: 'Acceso denegado: solo el autor o un administrador pueden eliminar este curso' }, 403);
+      }
+
+      // Si es un creador no-admin y el curso está publicado, se genera solicitud de revisión de eliminación
+      if (!isAdmin && course.is_published === 1) {
+        const reqId = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO course_reviews (id, course_id, creator_id, review_type, status, proposed_data, current_data, admin_feedback)
+          VALUES (?, ?, ?, 'deletion', 'pending', ?, ?, 'Solicitud de eliminación por el creador')
+        `).bind(reqId, courseId, currentUser.id, JSON.stringify(course), JSON.stringify(course)).run();
+
+        return json({ message: 'Solicitud de eliminación enviada al Administrador para verificación.' });
+      }
+
+      // Limpieza exhaustiva en cascada en D1 de TODAS las tablas con FK
+      try { await db.prepare('DELETE FROM course_reviews WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       await db.prepare('DELETE FROM courses WHERE id = ?').bind(courseId).run();
 
       return json({ message: 'Curso eliminado exitosamente' });
@@ -1227,21 +1283,25 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ]);
       }
 
-      const courses = (itemsRes.results || []).map((l: any) => ({
-        id: l.id,
-        courseId: l.course_id,
-        title: l.title,
-        description: l.description,
-        thumbnailUrl: l.thumbnail_url,
-        price: Number(l.price || 0),
-        currency: l.currency || 'USD',
-        purchaseCount: Number(l.purchase_count || 0),
-        averageRating: Number(l.average_rating || 5.0),
-        totalLessons: Number(l.total_lessons || 0),
-        creatorName: 'sxamx',
-        publishedAt: l.published_at,
-        isEnrolled: enrolledCourseIds.has(l.course_id),
-      }));
+      const courses = (itemsRes.results || []).map((l: any) => {
+        const actualCourseId = l.course_id || l.id;
+        const isEnrolled = enrolledCourseIds.has(actualCourseId) || enrolledCourseIds.has(l.id);
+        return {
+          id: l.id,
+          courseId: actualCourseId,
+          title: l.title,
+          description: l.description,
+          thumbnailUrl: l.thumbnail_url,
+          price: Number(l.price || 0),
+          currency: l.currency || 'USD',
+          purchaseCount: Number(l.purchase_count || 0),
+          averageRating: Number(l.average_rating || 5.0),
+          totalLessons: Number(l.total_lessons || 0),
+          creatorName: 'sxamx',
+          publishedAt: l.published_at,
+          isEnrolled,
+        };
+      });
 
       return json({ courses });
     }
@@ -1432,6 +1492,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const usersRes = await db.prepare(`
         SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference,
           COALESCE(u.is_active, 1) as isActive, COALESCE(u.is_suspended, 0) as isSuspended,
+          COALESCE(u.can_use_ai, 0) as canUseAi, COALESCE(u.ai_daily_limit, 10) as aiDailyLimit,
           u.created_at as createdAt,
           MAX(
             COALESCE(u.last_login_at, '1970-01-01'),
@@ -1446,6 +1507,26 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         ORDER BY u.created_at DESC
       `).all();
       return json({ users: usersRes.results || [] });
+    }
+
+    if (path.startsWith('/admin/users/') && path.endsWith('/role') && method === 'PATCH') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const targetUserId = path.replace('/admin/users/', '').replace('/role', '');
+      const body = await request.json() as any;
+      const newRole = body.role;
+      if (!['USER', 'CREATOR', 'ADMIN'].includes(newRole)) {
+        return json({ error: 'Rol inválido. Debe ser USER, CREATOR o ADMIN' }, 400);
+      }
+
+      const targetUser = await db.prepare('SELECT id, role, email FROM users WHERE id = ?').bind(targetUserId).first() as any;
+      if (!targetUser) return json({ error: 'Usuario no encontrado' }, 404);
+
+      if (targetUser.id === currentUser.id && newRole !== 'ADMIN') {
+        return json({ error: 'No puedes quitarte el rol de Administrador a ti mismo.' }, 400);
+      }
+
+      await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
+      return json({ message: `Rol actualizado a ${newRole} exitosamente`, role: newRole });
     }
 
     if (path.startsWith('/admin/users/') && path.endsWith('/status') && method === 'PATCH') {
@@ -1476,7 +1557,35 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         return json({ error: 'Seguridad: La cuenta del Administrador Principal está blindada y no se puede eliminar.' }, 400);
       }
 
-      // Cascading cleanup of progress & preferences
+      const actionCourses = url.searchParams.get('actionCourses') || 'adopt';
+      const newCreatorId = url.searchParams.get('newCreatorId');
+
+      if (actionCourses === 'adopt') {
+        // Adopt courses for Admin
+        await db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(currentUser.id, targetUserId).run();
+      } else if (actionCourses === 'reassign' && newCreatorId) {
+        // Reassign to another creator
+        await db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(newCreatorId, targetUserId).run();
+      } else if (actionCourses === 'delete') {
+        // Delete courses created by this user
+        const userCourses = await db.prepare('SELECT id FROM courses WHERE created_by = ?').bind(targetUserId).all();
+        for (const c of (userCourses.results || []) as any[]) {
+          try { await db.prepare('DELETE FROM course_reviews WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM courses WHERE id = ?').bind(c.id).run(); } catch (_) {}
+        }
+      }
+
+      // Cleanup user dependencies
+      try { await db.prepare('DELETE FROM creator_applications WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM course_collaborators WHERE user_id = ? OR invited_by = ?').bind(targetUserId, targetUserId).run(); } catch (_) {}
       await db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId).run();
       await db.prepare('DELETE FROM user_course_preferences WHERE user_id = ?').bind(targetUserId).run();
       await db.prepare('DELETE FROM users WHERE id = ?').bind(targetUserId).run();
@@ -1822,13 +1931,145 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const coursesRes = await db.prepare(`
         SELECT c.*,
           (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) as totalLessons,
-          (SELECT COUNT(DISTINCT user_id) FROM user_course_preferences WHERE course_id = c.id) as enrolledStudents
+          (SELECT COUNT(DISTINCT user_id) FROM user_course_preferences WHERE course_id = c.id) as enrolledStudents,
+          CASE WHEN c.created_by = ? THEN 'owner' ELSE 'collaborator' END as collaborationRole
         FROM courses c
         WHERE c.created_by = ?
+           OR c.id IN (SELECT course_id FROM course_collaborators WHERE user_id = ? AND status = 'accepted')
         ORDER BY c.created_at DESC
-      `).bind(currentUser.id).all();
+      `).bind(currentUser.id, currentUser.id, currentUser.id).all();
 
       return json({ courses: coursesRes.results || [] });
+    }
+
+    // -------------------------------------------------------------
+    // COURSE COLLABORATION & INVITATIONS
+    // -------------------------------------------------------------
+    if (path.startsWith('/courses/') && path.endsWith('/collaborators/invite') && method === 'POST') {
+      if (!currentUser || (currentUser.role !== 'CREATOR' && currentUser.role !== 'ADMIN')) {
+        return json({ error: 'Acceso denegado' }, 403);
+      }
+      const courseId = path.replace('/courses/', '').replace('/collaborators/invite', '');
+      const course = await db.prepare('SELECT id, title, created_by FROM courses WHERE id = ?').bind(courseId).first() as any;
+      if (!course) return json({ error: 'Curso no encontrado' }, 404);
+
+      if (currentUser.role !== 'ADMIN' && course.created_by !== currentUser.id) {
+        return json({ error: 'Solo el creador del curso o un Administrador pueden invitar colaboradores' }, 403);
+      }
+
+      const body = await request.json() as any;
+      const targetEmail = (body.email || '').trim().toLowerCase();
+      if (!targetEmail) return json({ error: 'Debes proporcionar un email válido' }, 400);
+
+      const targetUser = await db.prepare('SELECT id, email, full_name, role FROM users WHERE LOWER(email) = ?').bind(targetEmail).first() as any;
+      if (!targetUser) {
+        return json({ error: 'No existe ningún usuario registrado con ese correo electrónico' }, 404);
+      }
+
+      if (targetUser.id === course.created_by) {
+        return json({ error: 'El usuario ya es el autor principal de este curso' }, 400);
+      }
+
+      const existingCollab = await db.prepare('SELECT id, status FROM course_collaborators WHERE course_id = ? AND user_id = ?').bind(courseId, targetUser.id).first() as any;
+      if (existingCollab) {
+        if (existingCollab.status === 'accepted') {
+          return json({ error: 'Este usuario ya es colaborador activo del curso' }, 400);
+        } else if (existingCollab.status === 'pending') {
+          return json({ error: 'Ya hay una invitación pendiente para este usuario' }, 400);
+        }
+      }
+
+      const collabId = crypto.randomUUID();
+      await db.prepare(`
+        INSERT INTO course_collaborators (id, course_id, user_id, role, status, invited_by, created_at)
+        VALUES (?, ?, ?, 'editor', 'pending', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET status = 'pending', invited_by = excluded.invited_by
+      `).bind(collabId, courseId, targetUser.id, currentUser.id).run();
+
+      // Send notification
+      try {
+        await db.prepare(`
+          INSERT INTO notifications (id, user_id, type, title, message, link_url)
+          VALUES (?, ?, 'collaboration_invite', 'Invitación a colaborar en curso', ?, '/creator')
+        `).bind(
+          crypto.randomUUID(),
+          targetUser.id,
+          `${currentUser.fullName || currentUser.email} te invitó a co-mantener el curso "${course.title}". Ve a tu Panel de Creador para aceptar o rechazar.`
+        ).run();
+      } catch (_) {}
+
+      return json({ message: `Invitación enviada exitosamente a ${targetUser.email}` }, 201);
+    }
+
+    if (path.startsWith('/courses/') && path.endsWith('/collaborators') && method === 'GET') {
+      const courseId = path.replace('/courses/', '').replace('/collaborators', '');
+      const collabsRes = await db.prepare(`
+        SELECT cc.id, cc.course_id as courseId, cc.user_id as userId, cc.role, cc.status, cc.created_at as createdAt,
+          u.email, u.full_name as fullName
+        FROM course_collaborators cc
+        JOIN users u ON u.id = cc.user_id
+        WHERE cc.course_id = ?
+        ORDER BY cc.created_at DESC
+      `).bind(courseId).all();
+
+      return json({ collaborators: collabsRes.results || [] });
+    }
+
+    if (path.startsWith('/courses/') && path.includes('/collaborators/') && method === 'DELETE') {
+      if (!currentUser || (currentUser.role !== 'CREATOR' && currentUser.role !== 'ADMIN')) {
+        return json({ error: 'Acceso denegado' }, 403);
+      }
+      const parts = path.split('/');
+      const courseId = parts[2];
+      const targetUserId = parts[4];
+
+      const course = await db.prepare('SELECT created_by FROM courses WHERE id = ?').bind(courseId).first() as any;
+      if (!course) return json({ error: 'Curso no encontrado' }, 404);
+
+      if (currentUser.role !== 'ADMIN' && course.created_by !== currentUser.id && currentUser.id !== targetUserId) {
+        return json({ error: 'Acceso denegado para remover colaboradores' }, 403);
+      }
+
+      await db.prepare('DELETE FROM course_collaborators WHERE course_id = ? AND user_id = ?').bind(courseId, targetUserId).run();
+      return json({ message: 'Colaborador removido exitosamente' });
+    }
+
+    if (path === '/creator/invitations' && method === 'GET') {
+      if (!currentUser) return json({ error: 'No autenticado' }, 401);
+
+      const invsRes = await db.prepare(`
+        SELECT cc.id, cc.course_id as courseId, cc.role, cc.created_at as createdAt,
+          c.title as courseTitle, c.description as courseDescription, c.thumbnail_url as courseThumbnail,
+          u.email as inviterEmail, u.full_name as inviterName
+        FROM course_collaborators cc
+        JOIN courses c ON c.id = cc.course_id
+        JOIN users u ON u.id = cc.invited_by
+        WHERE cc.user_id = ? AND cc.status = 'pending'
+        ORDER BY cc.created_at DESC
+      `).bind(currentUser.id).all();
+
+      return json({ invitations: invsRes.results || [] });
+    }
+
+    if (path.startsWith('/creator/invitations/') && path.endsWith('/respond') && method === 'POST') {
+      if (!currentUser) return json({ error: 'No autenticado' }, 401);
+      const inviteId = path.replace('/creator/invitations/', '').replace('/respond', '');
+      const body = await request.json() as any;
+      const accept = Boolean(body.accept);
+
+      const invite = await db.prepare('SELECT * FROM course_collaborators WHERE id = ? AND user_id = ?').bind(inviteId, currentUser.id).first() as any;
+      if (!invite) return json({ error: 'Invitación no encontrada' }, 404);
+
+      const newStatus = accept ? 'accepted' : 'rejected';
+      await db.prepare('UPDATE course_collaborators SET status = ? WHERE id = ?').bind(newStatus, inviteId).run();
+
+      // If user accepted and was 'USER', ensure their role is at least 'CREATOR'
+      if (accept && currentUser.role === 'USER') {
+        await db.prepare("UPDATE users SET role = 'CREATOR' WHERE id = ?").bind(currentUser.id).run();
+        currentUser.role = 'CREATOR';
+      }
+
+      return json({ message: accept ? '¡Invitación aceptada! Ahora eres co-mantenedor del curso.' : 'Invitación rechazada', status: newStatus });
     }
 
     // -------------------------------------------------------------
@@ -2138,7 +2379,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const today = new Date().toISOString().split('T')[0];
       const isNewDay = userRow?.ai_last_used_date !== today;
       const usedToday = isNewDay ? 0 : Number(userRow?.ai_used_today || 0);
-      const dailyLimit = Number(userRow?.ai_daily_limit || 20);
+      const dailyLimit = Number(userRow?.ai_daily_limit || 10);
       const canUseAi = userRow?.role === 'ADMIN' || Boolean(userRow?.can_use_ai);
 
       const messagesRes = await db.prepare(`
@@ -2179,7 +2420,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const today = new Date().toISOString().split('T')[0];
       const isNewDay = userRow?.ai_last_used_date !== today;
       let usedToday = isNewDay ? 0 : Number(userRow?.ai_used_today || 0);
-      const dailyLimit = Number(userRow?.ai_daily_limit || 20);
+      const dailyLimit = Number(userRow?.ai_daily_limit || 10);
 
       if (!isAdmin && usedToday >= dailyLimit) {
         return json({ error: `Has alcanzado tu límite diario de ${dailyLimit} consultas de IA. Se restablecerá mañana.` }, 429);
@@ -2190,9 +2431,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       await db.prepare('INSERT INTO course_ai_messages (id, course_id, user_id, role, content) VALUES (?, ?, ?, ?, ?)')
         .bind(userMsgId, courseId, currentUser.id, 'user', prompt.trim()).run();
 
-      // Retrieve course context & recent messages
+      // Retrieve course context & 10 most recent messages
       const course = await db.prepare('SELECT title, description FROM courses WHERE id = ?').bind(courseId).first() as any;
-      const historyRes = await db.prepare('SELECT role, content FROM course_ai_messages WHERE course_id = ? AND user_id = ? ORDER BY created_at ASC LIMIT 10').bind(courseId, currentUser.id).all();
+      const historyRes = await db.prepare(`
+        SELECT role, content FROM (
+          SELECT role, content, created_at FROM course_ai_messages WHERE course_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10
+        ) sub ORDER BY created_at ASC
+      `).bind(courseId, currentUser.id).all();
 
       const systemPrompt = `Eres el Asistente Experto en Creación y Estructuración Pedagógica de Cursos para StudyPlatform.
 Estás ayudando al instructor a diseñar contenido interactivo de alta calidad para el curso "${course?.title || 'Curso'}".
@@ -2202,30 +2447,75 @@ Capacidades soportadas en StudyPlatform:
 
       let aiResponseText = '';
 
-      // Call Cloudflare Workers AI if available
-      const cfAi = (env as any)?.AI;
-      if (cfAi && typeof cfAi.run === 'function') {
-        try {
+      // 1. Try BYOK Provider if configured
+      try {
+        const aiSettings = await db.prepare('SELECT provider, model_id, api_key_encrypted, max_tokens, temperature, is_active FROM system_ai_settings WHERE id = "default"').first() as any;
+        if (aiSettings && aiSettings.is_active && aiSettings.api_key_encrypted) {
           const aiMessages = [
             { role: 'system', content: systemPrompt },
             ...(historyRes.results || []).map((m: any) => ({ role: m.role, content: m.content })),
           ];
-          const result = await cfAi.run('@cf/meta/llama-3.1-8b-instruct', {
-            messages: aiMessages,
-            max_tokens: 1024,
-            temperature: 0.7,
+          let endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${aiSettings.api_key_encrypted}`,
+          };
+          if (aiSettings.provider === 'gemini') {
+            endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          } else if (aiSettings.provider === 'openai') {
+            endpoint = 'https://api.openai.com/v1/chat/completions';
+          } else if (aiSettings.provider === 'openrouter') {
+            endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+            headers['HTTP-Referer'] = 'https://studyplatform.app';
+            headers['X-Title'] = 'StudyPlatform';
+          }
+
+          const apiRes = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: aiSettings.model_id || 'llama-3.3-70b-versatile',
+              messages: aiMessages,
+              max_tokens: Number(aiSettings.max_tokens || 1500),
+              temperature: Number(aiSettings.temperature || 0.7),
+            }),
           });
-          aiResponseText = result?.response || result?.text || '';
-        } catch (aiErr: any) {
-          console.error('Workers AI invocation error:', aiErr);
+
+          if (apiRes.ok) {
+            const apiData = await apiRes.json() as any;
+            aiResponseText = apiData?.choices?.[0]?.message?.content || '';
+          }
+        }
+      } catch (byokErr: any) {
+        console.warn('BYOK provider call failed:', byokErr);
+      }
+
+      // 2. Try Cloudflare Workers AI if available
+      if (!aiResponseText) {
+        const cfAi = (env as any)?.AI || (env as any)?.ai || (env as any)?.WORKERS_AI;
+        if (cfAi && typeof cfAi.run === 'function') {
+          try {
+            const aiMessages = [
+              { role: 'system', content: systemPrompt },
+              ...(historyRes.results || []).map((m: any) => ({ role: m.role, content: m.content })),
+            ];
+            const result = await cfAi.run('@cf/meta/llama-3.1-8b-instruct', {
+              messages: aiMessages,
+              max_tokens: 1024,
+              temperature: 0.7,
+            });
+            aiResponseText = result?.response || result?.text || '';
+          } catch (aiErr: any) {
+            console.warn('Workers AI invocation error:', aiErr);
+          }
         }
       }
 
+      // 3. Graceful Pedagogical Contextual Generator
       if (!aiResponseText) {
-        // High-quality contextual pedagogical engine
         const lower = prompt.toLowerCase();
         if (lower.includes('mermaid') || lower.includes('diagrama') || lower.includes('flujo') || lower.includes('arquitectura')) {
-          aiResponseText = `### 📊 Diagrama Mermaid Sugerido para "${course?.title || 'este tema'}"\n\nAquí tienes un diagrama vectorial interactivo listo para integrar en un bloque \`diagram\`:\n\n\`\`\`mermaid\ngraph TD\n    A[Inicio / Entrada de Datos] --> B{¿Cumple Requisitos?}\n    B -->|Sí| C[Procesamiento y Lógica Central]\n    B -->|No| D[Manejo de Errores y Alerta]\n    C --> E[Persistencia en Base de Datos]\n    E --> F[Retorno de Respuesta Exitosa]\n\`\`\`\n\n💡 **Tip:** Copia este bloque de código y pégalo directamente en tu lección dentro del tipo **Diagrama Mermaid**.`;
+          aiResponseText = `### 📊 Diagrama Mermaid Sugerido para "${course?.title || 'este tema'}"\n\nAquí tienes un diagrama vectorial interactivo listo para integrar en un bloque \`diagram\`:\n\n\`\`\`mermaid\ngraph TD\n    A["Inicio / Entrada de Datos"] --> B{"¿Cumple Requisitos?"}\n    B -->|Sí| C["Procesamiento y Lógica Central"]\n    B -->|No| D["Manejo de Errores y Alerta"]\n    C --> E["Persistencia en Base de Datos"]\n    E --> F["Retorno de Respuesta Exitosa"]\n\`\`\`\n\n💡 **Tip:** Copia este bloque de código y pégalo directamente en tu lección dentro del tipo **Diagrama Mermaid**.`;
         } else if (lower.includes('quiz') || lower.includes('evaluacion') || lower.includes('pregunta') || lower.includes('cuestionario')) {
           aiResponseText = `### 📝 Cuestionario Evaluativo Propuesto para "${course?.title || 'la lección'}"\n\nAquí tienes una pregunta interactiva con retroalimentación inmediata:\n\n\`\`\`json\n{\n  "type": "question_choice",\n  "question": "¿Cuál es el propósito fundamental de este patrón o concepto?",\n  "options": [\n    { "id": "opt1", "text": "Garantizar la modularidad, escalabilidad y separación de responsabilidades.", "isCorrect": true },\n    { "id": "opt2", "text": "Aumentar la complejidad ciclomática del proyecto.", "isCorrect": false },\n    { "id": "opt3", "text": "Evitar la utilización de estructuras de datos.", "isCorrect": false }\n  ],\n  "explanation": "La opción correcta asegura que el software sea fácil de mantener y extender siguiendo los estándares de la industria."\n}\n\`\`\``;
         } else if (lower.includes('modulo') || lower.includes('temario') || lower.includes('estructura') || lower.includes('leccion')) {
@@ -2233,7 +2523,7 @@ Capacidades soportadas en StudyPlatform:
         } else if (lower.includes('codigo') || lower.includes('ejemplo') || lower.includes('code') || lower.includes('script')) {
           aiResponseText = `### 💻 Ejemplo de Código Práctico\n\nAquí tienes una implementación limpia con buenas prácticas:\n\n\`\`\`javascript\n// Función principal con validación defensiva\nexport function procesarDatos(payload) {\n  if (!payload || typeof payload !== 'object') {\n    throw new Error('Payload inválido');\n  }\n  \n  return {\n    ...payload,\n    procesado: true,\n    timestamp: new Date().toISOString()\n  };\n}\n\`\`\`\n\n💡 **Tip:** Puedes colocar este bloque en un componente \`code\` para que los alumnos lo copien con un solo clic.`;
         } else {
-          aiResponseText = `### 💡 Asistencia de Creación para "${course?.title || 'tu curso'}"\n\nHe analizado tu solicitud: **"${prompt}"**.\n\n**Recomendación Pedagógica:**\n1. **Introducción Conceptual:** Empieza con un bloque \`heading\` y un bloque \`text\` explicativo con analogías claras.\n2. **Práctica Interactiva:** Agrega un bloque \`code\` con código fuente limpio o un diagrama vectorial \`diagram\` (Mermaid).\n3. **Refuerzo y Evaluación:** Termina con una pregunta interactiva \`question_choice\` o un acordeón \`accordion\` de pistas.\n\n*(Nota: Si deseas activar el modelo neuronal Llama 3.1 en Cloudflare Pages, vincula la variable 'AI' en el panel de Cloudflare -> Pages -> Settings -> Functions -> Workers AI)*`;
+          aiResponseText = `### 💡 Asistencia de Creación para "${course?.title || 'tu curso'}"\n\nHe analizado tu solicitud: **"${prompt}"**.\n\n**Recomendación Pedagógica:**\n1. **Introducción Conceptual:** Empieza con un bloque \`heading\` y un bloque \`text\` explicativo con analogías claras.\n2. **Práctica Interactiva:** Agrega un bloque \`code\` con código fuente limpio o un diagrama vectorial \`diagram\` (Mermaid).\n3. **Refuerzo y Evaluación:** Termina con una pregunta interactiva \`question_choice\` o un acordeón \`accordion\` de pistas.`;
         }
       }
 
@@ -2275,6 +2565,64 @@ Capacidades soportadas en StudyPlatform:
         .bind(canUseAi ? 1 : 0, aiDailyLimit !== undefined ? Number(aiDailyLimit) : null, targetUserId).run();
 
       return json({ message: 'Acceso a IA actualizado exitosamente' });
+    }
+
+    // -------------------------------------------------------------
+    // ADMIN: BYOK System AI Settings (/admin/ai-config)
+    // -------------------------------------------------------------
+    if (path === '/admin/ai-config' && method === 'GET') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const config = await db.prepare('SELECT provider, model_id as modelId, api_key_masked as apiKeyMasked, max_tokens as maxTokens, temperature, is_active as isActive FROM system_ai_settings WHERE id = "default"').first() as any;
+      return json({
+        config: config || {
+          provider: 'groq',
+          modelId: 'llama-3.3-70b-versatile',
+          apiKeyMasked: '',
+          maxTokens: 1500,
+          temperature: 0.7,
+          isActive: 0,
+        },
+      });
+    }
+
+    if (path === '/admin/ai-config' && method === 'PUT') {
+      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      const body = await request.json() as any;
+      const { provider, modelId, apiKey, maxTokens, temperature, isActive } = body;
+
+      const current = await db.prepare('SELECT api_key_encrypted, api_key_masked FROM system_ai_settings WHERE id = "default"').first() as any;
+      let keyEncrypted = current?.api_key_encrypted || '';
+      let keyMasked = current?.api_key_masked || '';
+
+      if (apiKey && typeof apiKey === 'string' && !apiKey.includes('••••')) {
+        keyEncrypted = apiKey.trim();
+        const raw = apiKey.trim();
+        keyMasked = raw.length > 8 ? `${raw.slice(0, 4)}••••••••${raw.slice(-4)}` : '••••••••';
+      }
+
+      await db.prepare(`
+        INSERT INTO system_ai_settings (id, provider, model_id, api_key_encrypted, api_key_masked, max_tokens, temperature, is_active, updated_at)
+        VALUES ('default', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          provider = excluded.provider,
+          model_id = excluded.model_id,
+          api_key_encrypted = excluded.api_key_encrypted,
+          api_key_masked = excluded.api_key_masked,
+          max_tokens = excluded.max_tokens,
+          temperature = excluded.temperature,
+          is_active = excluded.is_active,
+          updated_at = CURRENT_TIMESTAMP
+      `).bind(
+        provider || 'groq',
+        modelId || 'llama-3.3-70b-versatile',
+        keyEncrypted,
+        keyMasked,
+        Number(maxTokens || 1500),
+        Number(temperature || 0.7),
+        isActive ? 1 : 0
+      ).run();
+
+      return json({ message: 'Configuración de IA guardada exitosamente' });
     }
 
     return json({ error: `Ruta no encontrada: ${method} ${path}` }, 404);
