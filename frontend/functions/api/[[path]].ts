@@ -757,16 +757,17 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         return json({ message: 'Solicitud de eliminación enviada al Administrador para verificación.' });
       }
 
-      // Limpieza exhaustiva en cascada en D1 de TODAS las tablas con FK
+      // Limpieza exhaustiva en cascada en D1 en orden topológico estricto
       try { await db.prepare('DELETE FROM course_reviews WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
+      try { await db.prepare('DELETE FROM user_progress WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
-      try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
-      try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(courseId).run(); } catch (_) {}
       await db.prepare('DELETE FROM courses WHERE id = ?').bind(courseId).run();
 
       return json({ message: 'Curso eliminado exitosamente' });
@@ -1574,11 +1575,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
+          try { await db.prepare('DELETE FROM user_progress WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
           try { await db.prepare('DELETE FROM courses WHERE id = ?').bind(c.id).run(); } catch (_) {}
         }
       }
