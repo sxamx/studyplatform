@@ -129,15 +129,204 @@ async function verifyJwt(token: string, secret?: string): Promise<any | null> {
   }
 }
 
+// Global Isolate Cache for D1 Schema Migrations & Indexes
+let isSchemaInitialized = false;
+
+// Sliding-window In-Memory Rate Limiter (Brute-force protection)
+const ipRateLimits = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(key: string, maxAttempts = 15, windowMs = 5 * 60 * 1000): boolean {
+  const now = Date.now();
+  const entry = ipRateLimits.get(key);
+  if (!entry || now > entry.resetAt) {
+    ipRateLimits.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxAttempts) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+
+// Ensure Schema & High-Performance Indexes Run ONCE per worker isolate
+async function ensureSchemaOnce(db: D1Database): Promise<void> {
+  if (isSchemaInitialized) return;
+
+  // 1. New Columns
+  const colMigrations = [
+    'ALTER TABLE courses ADD COLUMN sequential_unlock INTEGER DEFAULT 0',
+    'ALTER TABLE courses ADD COLUMN created_by VARCHAR(36)',
+    "ALTER TABLE courses ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'",
+    'ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1',
+    'ALTER TABLE users ADD COLUMN is_suspended INTEGER DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN can_use_ai INTEGER DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN ai_daily_limit INTEGER DEFAULT 10',
+    'ALTER TABLE users ADD COLUMN ai_used_today INTEGER DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN ai_last_used_date TEXT DEFAULT ""',
+  ];
+  for (const q of colMigrations) {
+    try { await db.prepare(q).run(); } catch (_) {}
+  }
+
+  // 2. Tables & Constraints
+  try {
+    await db.batch([
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS creator_badges (
+          user_id TEXT PRIMARY KEY,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS creator_applications (
+          id VARCHAR(36) PRIMARY KEY,
+          user_id VARCHAR(36) NOT NULL,
+          bio TEXT NOT NULL,
+          portfolio_url TEXT,
+          motivation TEXT NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          admin_notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS application_messages (
+          id VARCHAR(36) PRIMARY KEY,
+          application_id VARCHAR(36) NOT NULL,
+          sender_id VARCHAR(36) NOT NULL,
+          message TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (application_id) REFERENCES creator_applications(id),
+          FOREIGN KEY (sender_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS course_reviews (
+          id VARCHAR(36) PRIMARY KEY,
+          course_id VARCHAR(36) NOT NULL,
+          creator_id VARCHAR(36) NOT NULL,
+          review_type VARCHAR(20) NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          proposed_data TEXT NOT NULL,
+          current_data TEXT,
+          admin_feedback TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (course_id) REFERENCES courses(id),
+          FOREIGN KEY (creator_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id VARCHAR(36) PRIMARY KEY,
+          user_id VARCHAR(36) NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          title VARCHAR(150) NOT NULL,
+          message TEXT NOT NULL,
+          link_url TEXT,
+          is_read INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS notification_preferences (
+          user_id VARCHAR(36) PRIMARY KEY,
+          notify_creator_apps INTEGER DEFAULT 1,
+          notify_course_reviews INTEGER DEFAULT 1,
+          notify_direct_messages INTEGER DEFAULT 1,
+          notify_student_enrolled INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS course_ai_messages (
+          id VARCHAR(36) PRIMARY KEY,
+          course_id VARCHAR(36) NOT NULL,
+          user_id VARCHAR(36) NOT NULL,
+          role VARCHAR(10) NOT NULL,
+          content TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (course_id) REFERENCES courses(id),
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS course_collaborators (
+          id VARCHAR(36) PRIMARY KEY,
+          course_id VARCHAR(36) NOT NULL,
+          user_id VARCHAR(36) NOT NULL,
+          role VARCHAR(20) DEFAULT 'editor',
+          status VARCHAR(20) DEFAULT 'pending',
+          invited_by VARCHAR(36) NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS system_ai_settings (
+          id TEXT PRIMARY KEY DEFAULT 'default',
+          provider VARCHAR(30) NOT NULL DEFAULT 'groq',
+          model_id VARCHAR(100) NOT NULL DEFAULT 'llama-3.3-70b-versatile',
+          api_key_encrypted TEXT NOT NULL DEFAULT '',
+          api_key_masked VARCHAR(25) NOT NULL DEFAULT '',
+          max_tokens INTEGER DEFAULT 1500,
+          temperature REAL DEFAULT 0.7,
+          is_active INTEGER DEFAULT 0,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `),
+    ]);
+  } catch (_) {}
+
+  // 3. High-Performance Composite B-Tree Indexes
+  try {
+    await db.batch([
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_module ON lessons(module_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_order ON lessons(course_id, order_index)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_modules_course ON modules(course_id, order_index)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_user_prog_user ON user_progress(user_id, completed)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_user_prog_course ON user_progress(course_id, user_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_user_prog_lesson ON user_progress(lesson_id, user_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_user_course_pref ON user_course_preferences(user_id, course_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_created_by ON courses(created_by)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_courses_published ON courses(is_published, approval_status)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_collab_course_user ON course_collaborators(course_id, user_id, status)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_creator_badges_user ON creator_badges(user_id)'),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ai_course ON course_ai_messages(course_id, created_at)'),
+    ]);
+  } catch (_) {}
+
+  isSchemaInitialized = true;
+}
+
+// Course Ownership & Collaboration Authorization Helper (Zero IDOR)
+async function canManageCourse(courseId: string, user: { id: string; role: string } | null, db: D1Database): Promise<boolean> {
+  if (!user) return false;
+  if (user.role === 'ADMIN') return true;
+  if (user.role !== 'CREATOR') return false;
+  const course = await db.prepare('SELECT created_by FROM courses WHERE id = ?').bind(courseId).first() as any;
+  if (course && course.created_by === user.id) return true;
+  const isCollab = await db.prepare('SELECT 1 FROM course_collaborators WHERE course_id = ? AND user_id = ? AND status = "accepted"').bind(courseId, user.id).first();
+  return Boolean(isCollab);
+}
+
 // 3. Main Request Handler
 export async function onRequest(context: { request: Request; env: Env; params: { path?: string[] } }): Promise<Response> {
   const { request, env } = context;
   const url = new URL(request.url);
   const method = request.method;
   const path = url.pathname.replace(/^\/api\/v1/, '').replace(/^\/api/, '') || '/';
+  const clientIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1';
 
-  // Helper response function
-  const json = (data: any, status = 200) => {
+  // Helper response function with strict OWASP security headers
+  const json = (data: any, status = 200, extraHeaders: Record<string, string> = {}) => {
     return new Response(JSON.stringify(data), {
       status,
       headers: {
@@ -145,6 +334,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'X-XSS-Protection': '1; mode=block',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        ...extraHeaders,
       },
     });
   };
@@ -156,6 +351,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
       },
     });
   }
@@ -173,182 +369,15 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
   const db = env.DB;
 
+  // Warm schema migrations & indexes once per isolate (0ms overhead on subsequent requests)
+  await ensureSchemaOnce(db);
+
   // Extract User Token
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
   let currentUser = token ? await verifyJwt(token, env.JWT_SECRET) : null;
 
   try {
-    // -------------------------------------------------------------
-    // D1 Auto-Migrations (Ensures new columns exist without breaking live DB)
-    // -------------------------------------------------------------
-    try {
-      await db.prepare('ALTER TABLE courses ADD COLUMN sequential_unlock INTEGER DEFAULT 0').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE courses ADD COLUMN created_by VARCHAR(36)').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN is_suspended INTEGER DEFAULT 0').run();
-    } catch (_) {}
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS creator_applications (
-          id VARCHAR(36) PRIMARY KEY,
-          user_id VARCHAR(36) NOT NULL,
-          bio TEXT NOT NULL,
-          portfolio_url TEXT,
-          motivation TEXT NOT NULL,
-          status VARCHAR(20) DEFAULT 'pending',
-          admin_notes TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS application_messages (
-          id VARCHAR(36) PRIMARY KEY,
-          application_id VARCHAR(36) NOT NULL,
-          sender_id VARCHAR(36) NOT NULL,
-          message TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (application_id) REFERENCES creator_applications(id),
-          FOREIGN KEY (sender_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-    try {
-      await db.prepare("ALTER TABLE courses ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'").run();
-    } catch (_) {}
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS course_reviews (
-          id VARCHAR(36) PRIMARY KEY,
-          course_id VARCHAR(36) NOT NULL,
-          creator_id VARCHAR(36) NOT NULL,
-          review_type VARCHAR(20) NOT NULL,
-          status VARCHAR(20) DEFAULT 'pending',
-          proposed_data TEXT NOT NULL,
-          current_data TEXT,
-          admin_feedback TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (course_id) REFERENCES courses(id),
-          FOREIGN KEY (creator_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS notifications (
-          id VARCHAR(36) PRIMARY KEY,
-          user_id VARCHAR(36) NOT NULL,
-          type VARCHAR(50) NOT NULL,
-          title VARCHAR(150) NOT NULL,
-          message TEXT NOT NULL,
-          link_url TEXT,
-          is_read INTEGER DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS notification_preferences (
-          user_id VARCHAR(36) PRIMARY KEY,
-          notify_creator_apps INTEGER DEFAULT 1,
-          notify_course_reviews INTEGER DEFAULT 1,
-          notify_direct_messages INTEGER DEFAULT 1,
-          notify_student_enrolled INTEGER DEFAULT 1,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN can_use_ai INTEGER DEFAULT 0').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN ai_daily_limit INTEGER DEFAULT 20').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN ai_used_today INTEGER DEFAULT 0').run();
-    } catch (_) {}
-    try {
-      await db.prepare('ALTER TABLE users ADD COLUMN ai_last_used_date VARCHAR(10)').run();
-    } catch (_) {}
-
-    // -------------------------------------------------------------
-    // Creators Table (Decoupled from SQLite users.role CHECK constraint)
-    // -------------------------------------------------------------
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS creator_badges (
-          user_id TEXT PRIMARY KEY,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
-      await db.prepare(`
-        INSERT OR IGNORE INTO creator_badges (user_id)
-        SELECT user_id FROM creator_applications WHERE status = 'approved'
-      `).run();
-    } catch (_) {}
-
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS course_ai_messages (
-          id VARCHAR(36) PRIMARY KEY,
-          course_id VARCHAR(36) NOT NULL,
-          user_id VARCHAR(36) NOT NULL,
-          role VARCHAR(10) NOT NULL,
-          content TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (course_id) REFERENCES courses(id),
-          FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-      `).run();
-    } catch (_) {}
-
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS course_collaborators (
-          id VARCHAR(36) PRIMARY KEY,
-          course_id VARCHAR(36) NOT NULL,
-          user_id VARCHAR(36) NOT NULL,
-          role VARCHAR(20) DEFAULT 'editor',
-          status VARCHAR(20) DEFAULT 'pending',
-          invited_by VARCHAR(36) NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-      `).run();
-    } catch (_) {}
-
-    try {
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS system_ai_settings (
-          id TEXT PRIMARY KEY DEFAULT 'default',
-          provider VARCHAR(30) NOT NULL DEFAULT 'groq',
-          model_id VARCHAR(100) NOT NULL DEFAULT 'llama-3.3-70b-versatile',
-          api_key_encrypted TEXT NOT NULL DEFAULT '',
-          api_key_masked VARCHAR(25) NOT NULL DEFAULT '',
-          max_tokens INTEGER DEFAULT 1500,
-          temperature REAL DEFAULT 0.7,
-          is_active INTEGER DEFAULT 0,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
-    } catch (_) {}
-
     // -------------------------------------------------------------
     // Global User Status & Suspension Check + Realtime Role Sync
     // -------------------------------------------------------------
@@ -372,6 +401,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // AUTH: Register
     // -------------------------------------------------------------
     if (path === '/auth/register' && method === 'POST') {
+      if (!checkRateLimit(`reg:${clientIp}`, 10, 5 * 60 * 1000)) {
+        return json({ error: 'Demasiadas solicitudes de registro desde esta dirección IP. Por favor espera 5 minutos.' }, 429);
+      }
       const body = await request.json() as any;
       const { email, password, fullName } = body;
       if (!email || !password) return json({ error: 'Email y contraseña requeridos' }, 400);
@@ -398,6 +430,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // AUTH: Login
     // -------------------------------------------------------------
     if (path === '/auth/login' && method === 'POST') {
+      if (!checkRateLimit(`login:${clientIp}`, 20, 5 * 60 * 1000)) {
+        return json({ error: 'Demasiados intentos de acceso desde esta dirección IP. Por favor espera 5 minutos.' }, 429);
+      }
       const body = await request.json() as any;
       const { email, password } = body;
       if (!email || !password) return json({ error: 'Email y contraseña requeridos' }, 400);
@@ -617,20 +652,21 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
       if (!course) return json({ error: 'Curso no encontrado' }, 404);
 
-      const modulesRes = await db.prepare('SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all();
-      const lessonsRes = await db.prepare('SELECT id, module_id, title, description, order_index, estimated_minutes FROM lessons WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all();
+      const [modulesRes, lessonsRes, upRes] = await Promise.all([
+        db.prepare('SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all(),
+        db.prepare('SELECT id, module_id, title, description, order_index, estimated_minutes FROM lessons WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all(),
+        currentUser
+          ? db.prepare(`
+              SELECT DISTINCT lesson_id 
+              FROM user_progress 
+              WHERE user_id = ? 
+                AND completed = 1 
+                AND (course_id = ? OR lesson_id IN (SELECT id FROM lessons WHERE course_id = ?))
+            `).bind(currentUser.id, courseId, courseId).all()
+          : Promise.resolve({ results: [] as any[] }),
+      ]);
 
-      let completedLessonIds = new Set<string>();
-      if (currentUser) {
-        const upRes = await db.prepare(`
-          SELECT DISTINCT lesson_id 
-          FROM user_progress 
-          WHERE user_id = ? 
-            AND completed = 1 
-            AND (course_id = ? OR lesson_id IN (SELECT id FROM lessons WHERE course_id = ?))
-        `).bind(currentUser.id, courseId, courseId).all();
-        completedLessonIds = new Set((upRes.results || []).map((r: any) => r.lesson_id));
-      }
+      const completedLessonIds = new Set((upRes.results || []).map((r: any) => r.lesson_id));
 
       const isSequential = Boolean(course.sequential_unlock) && (!currentUser || currentUser.role !== 'ADMIN');
       let previousCompleted = true;
@@ -688,8 +724,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/courses/') && method === 'PUT') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       const courseId = path.replace('/courses/', '');
+      const allowed = await canManageCourse(courseId, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: se requieren permisos sobre este curso' }, 403);
       const body = await request.json() as any;
       const { title, description, isPublished, sequentialUnlock, orderIndex, trackId, thumbnailUrl } = body;
 
@@ -761,10 +798,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // MODULES: Create (POST), Update (PUT), Delete (DELETE)
     // -------------------------------------------------------------
     if (path === '/modules' && method === 'POST') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const body = await request.json() as any;
       const { courseId, title, description, orderIndex, estimatedHours } = body;
       if (!courseId || !title) return json({ error: 'courseId y title son obligatorios' }, 400);
+
+      const allowed = await canManageCourse(courseId, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
 
       const id = crypto.randomUUID();
       await db.prepare('INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours) VALUES (?, ?, ?, ?, ?, ?)')
@@ -775,8 +815,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/modules/') && method === 'PUT') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const moduleId = path.replace('/modules/', '');
+      const mod = await db.prepare('SELECT course_id FROM modules WHERE id = ?').bind(moduleId).first() as any;
+      if (!mod) return json({ error: 'Módulo no encontrado' }, 404);
+
+      const allowed = await canManageCourse(mod.course_id, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
+
       const body = await request.json() as any;
       const { title, description, orderIndex, estimatedHours } = body;
 
@@ -794,8 +840,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/modules/') && method === 'DELETE') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const moduleId = path.replace('/modules/', '');
+      const mod = await db.prepare('SELECT course_id FROM modules WHERE id = ?').bind(moduleId).first() as any;
+      if (!mod) return json({ error: 'Módulo no encontrado' }, 404);
+
+      const allowed = await canManageCourse(mod.course_id, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
+
       await db.prepare('UPDATE lessons SET module_id = NULL WHERE module_id = ?').bind(moduleId).run();
       await db.prepare('DELETE FROM modules WHERE id = ?').bind(moduleId).run();
       return json({ message: 'Módulo eliminado con éxito' });
@@ -805,10 +857,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     // LESSONS: Create (POST), Get (GET), Update (PUT), Delete (DELETE)
     // -------------------------------------------------------------
     if (path === '/lessons' && method === 'POST') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const body = await request.json() as any;
       const { courseId, moduleId, title, description, orderIndex, estimatedMinutes, content } = body;
       if (!courseId || !title) return json({ error: 'courseId y title son obligatorios' }, 400);
+
+      const allowed = await canManageCourse(courseId, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
 
       const lessonId = crypto.randomUUID();
       const contentObj = content || {
@@ -896,8 +951,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/lessons/') && method === 'PUT') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const lessonId = path.replace('/lessons/', '');
+      const les = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
+      if (!les) return json({ error: 'Lección no encontrada' }, 404);
+
+      const allowed = await canManageCourse(les.course_id, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
+
       const body = await request.json() as any;
       const { title, description, moduleId, orderIndex, estimatedMinutes, content } = body;
 
@@ -925,8 +986,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     if (path.startsWith('/lessons/') && method === 'DELETE') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const lessonId = path.replace('/lessons/', '');
+      const les = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
+      if (!les) return json({ error: 'Lección no encontrada' }, 404);
+
+      const allowed = await canManageCourse(les.course_id, currentUser, db);
+      if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso' }, 403);
+
       await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
       await db.prepare('DELETE FROM user_progress WHERE lesson_id = ?').bind(lessonId).run();
       await db.prepare('DELETE FROM lessons WHERE id = ?').bind(lessonId).run();
@@ -934,12 +1001,19 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     }
 
     // -------------------------------------------------------------
-    // UPLOAD / IMPORT JSON
+    // UPLOAD / IMPORT JSON (Batched D1 Transactions & Zero IDOR)
     // -------------------------------------------------------------
     if (path === '/upload/json' && method === 'POST') {
-      if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
+      if (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'CREATOR')) {
+        return json({ error: 'Acceso denegado. Se requieren permisos de Creador o Administrador.' }, 403);
+      }
       const body = await request.json() as any;
       const { courseId, moduleId, jsonContent } = body;
+
+      if (courseId) {
+        const allowed = await canManageCourse(courseId, currentUser, db);
+        if (!allowed) return json({ error: 'Acceso denegado: no tienes permisos sobre este curso.' }, 403);
+      }
 
       let jsonData: any = jsonContent;
       if (typeof jsonContent === 'string') {
@@ -968,38 +1042,55 @@ export async function onRequest(context: { request: Request; env: Env; params: {
               .run();
           }
         }
+
+        // Auto-enroll creator in preferences
+        try {
+          await db.prepare(`
+            INSERT INTO user_course_preferences (id, user_id, course_id, status)
+            VALUES (?, ?, ?, 'in_progress')
+            ON CONFLICT(user_id, course_id) DO NOTHING
+          `).bind(crypto.randomUUID(), currentUser.id, targetCourseId).run();
+        } catch (_) {}
       }
+
+      // Helper to run statements in batches of up to 100
+      const executeBatches = async (stmts: any[]) => {
+        for (let i = 0; i < stmts.length; i += 100) {
+          await db.batch(stmts.slice(i, i + 100));
+        }
+      };
 
       // Caso 0: Paquete Modular con Manifest y Archivos de Lección { manifest, lessons: [{ name, content }] }
       if (jsonData.manifest || (jsonData.lessons && Array.isArray(jsonData.lessons))) {
         const manifest = jsonData.manifest || {};
         const lessonsList = Array.isArray(jsonData.lessons) ? jsonData.lessons : [];
+        const batchStmts: any[] = [];
 
-        // 1. Si el manifest define título y descripción, actualizar metadatos del curso
         if (manifest.title || manifest.description) {
-          await db.prepare('UPDATE courses SET title = COALESCE(?, title), description = COALESCE(?, description), thumbnail_url = COALESCE(?, thumbnail_url) WHERE id = ?')
-            .bind(manifest.title || null, manifest.description || null, manifest.thumbnailUrl || manifest.thumbnail || null, targetCourseId)
-            .run();
+          batchStmts.push(
+            db.prepare('UPDATE courses SET title = COALESCE(?, title), description = COALESCE(?, description), thumbnail_url = COALESCE(?, thumbnail_url) WHERE id = ?')
+              .bind(manifest.title || null, manifest.description || null, manifest.thumbnailUrl || manifest.thumbnail || null, targetCourseId)
+          );
         }
 
-        // 2. Módulos definidos en el manifest
-        const moduleMap = new Map<string, string>(); // 'modulo 1' o ID -> DB module_id
+        const moduleMap = new Map<string, string>();
         if (Array.isArray(manifest.modules)) {
           for (let mIdx = 0; mIdx < manifest.modules.length; mIdx++) {
             const m = manifest.modules[mIdx];
             const rawModId = m.id || m.key || `mod_${mIdx + 1}`;
             const mId = `${targetCourseId}_${rawModId}`;
             const mTitle = m.title || `Módulo ${mIdx + 1}`;
-            await db.prepare(`
-              INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours)
-              VALUES (?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET
-                title = excluded.title,
-                description = excluded.description,
-                order_index = excluded.order_index,
-                estimated_hours = excluded.estimated_hours
-            `).bind(mId, targetCourseId, mTitle, m.description || '', m.order || (mIdx + 1), m.estimatedHours || 4)
-              .run();
+            batchStmts.push(
+              db.prepare(`
+                INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  title = excluded.title,
+                  description = excluded.description,
+                  order_index = excluded.order_index,
+                  estimated_hours = excluded.estimated_hours
+              `).bind(mId, targetCourseId, mTitle, m.description || '', m.order || (mIdx + 1), m.estimatedHours || 4)
+            );
 
             moduleMap.set(mTitle.toLowerCase().trim(), mId);
             if (m.id) moduleMap.set(String(m.id).toLowerCase().trim(), mId);
@@ -1007,7 +1098,6 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           }
         }
 
-        // 3. Procesar e importar cada archivo de lección con diagnóstico individual
         let importedCount = 0;
         const fileErrors: string[] = [];
 
@@ -1049,24 +1139,30 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             },
           };
 
-          await db.prepare(`
-            INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              module_id = excluded.module_id,
-              title = excluded.title,
-              description = excluded.description,
-              order_index = excluded.order_index,
-              estimated_minutes = excluded.estimated_minutes
-          `).bind(lessonId, targetCourseId, assignedModId, title, lessonData.description || '', order, estMin)
-            .run();
+          batchStmts.push(
+            db.prepare(`
+              INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                module_id = excluded.module_id,
+                title = excluded.title,
+                description = excluded.description,
+                order_index = excluded.order_index,
+                estimated_minutes = excluded.estimated_minutes
+            `).bind(lessonId, targetCourseId, assignedModId, title, lessonData.description || '', order, estMin)
+          );
 
-          await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
-          await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
-            .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
-            .run();
+          batchStmts.push(db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId));
+          batchStmts.push(
+            db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+              .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+          );
 
           importedCount++;
+        }
+
+        if (batchStmts.length > 0) {
+          await executeBatches(batchStmts);
         }
 
         if (fileErrors.length > 0) {
@@ -1087,20 +1183,23 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       if (courseObj && Array.isArray(courseObj.modules)) {
         let createdModulesCount = 0;
         let createdLessonsCount = 0;
+        const batchStmts: any[] = [];
 
         for (let mIdx = 0; mIdx < courseObj.modules.length; mIdx++) {
           const mod = courseObj.modules[mIdx];
           const rawModId = mod.id || `mod_${mIdx + 1}`;
           const newModId = `${targetCourseId}_${rawModId}`;
-          await db.prepare(`
-            INSERT INTO modules (id, course_id, title, description, order_index)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              title = excluded.title,
-              description = excluded.description,
-              order_index = excluded.order_index
-          `).bind(newModId, targetCourseId, mod.title || `Módulo ${mIdx + 1}`, mod.description || '', mod.order || (mIdx + 1))
-            .run();
+          batchStmts.push(
+            db.prepare(`
+              INSERT INTO modules (id, course_id, title, description, order_index, estimated_hours)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                description = excluded.description,
+                order_index = excluded.order_index,
+                estimated_hours = excluded.estimated_hours
+            `).bind(newModId, targetCourseId, mod.title || `Módulo ${mIdx + 1}`, mod.description || '', mod.order || (mIdx + 1), mod.estimatedHours || 4)
+          );
           createdModulesCount++;
 
           if (Array.isArray(mod.lessons)) {
@@ -1125,26 +1224,32 @@ export async function onRequest(context: { request: Request; env: Env; params: {
                 },
               };
 
-              await db.prepare(`
-                INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  module_id = excluded.module_id,
-                  title = excluded.title,
-                  description = excluded.description,
-                  order_index = excluded.order_index,
-                  estimated_minutes = excluded.estimated_minutes
-              `).bind(newLessonId, targetCourseId, newModId, lTitle, lDesc, lOrder, lEst)
-                .run();
+              batchStmts.push(
+                db.prepare(`
+                  INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+                  VALUES (?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    module_id = excluded.module_id,
+                    title = excluded.title,
+                    description = excluded.description,
+                    order_index = excluded.order_index,
+                    estimated_minutes = excluded.estimated_minutes
+                `).bind(newLessonId, targetCourseId, newModId, lTitle, lDesc, lOrder, lEst)
+              );
 
-              await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(newLessonId).run();
-              await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
-                .bind(crypto.randomUUID(), newLessonId, JSON.stringify(fullLessonJson))
-                .run();
+              batchStmts.push(db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(newLessonId));
+              batchStmts.push(
+                db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+                  .bind(crypto.randomUUID(), newLessonId, JSON.stringify(fullLessonJson))
+              );
 
               createdLessonsCount++;
             }
           }
+        }
+
+        if (batchStmts.length > 0) {
+          await executeBatches(batchStmts);
         }
 
         return json({
@@ -1156,6 +1261,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       // Caso 2: Array de lecciones [ { ... }, { ... } ]
       if (Array.isArray(jsonData)) {
         let count = 0;
+        const batchStmts: any[] = [];
         for (let idx = 0; idx < jsonData.length; idx++) {
           const item = jsonData[idx];
           const lessonData = item.lesson || item;
@@ -1175,25 +1281,32 @@ export async function onRequest(context: { request: Request; env: Env; params: {
             },
           };
 
-          await db.prepare(`
-            INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-              module_id = excluded.module_id,
-              title = excluded.title,
-              description = excluded.description,
-              order_index = excluded.order_index,
-              estimated_minutes = excluded.estimated_minutes
-          `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || (idx + 1)), Number(lessonData.estimatedMinutes || 15))
-            .run();
+          batchStmts.push(
+            db.prepare(`
+              INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                module_id = excluded.module_id,
+                title = excluded.title,
+                description = excluded.description,
+                order_index = excluded.order_index,
+                estimated_minutes = excluded.estimated_minutes
+            `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || (idx + 1)), Number(lessonData.estimatedMinutes || 15))
+          );
 
-          await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
-          await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
-            .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
-            .run();
+          batchStmts.push(db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId));
+          batchStmts.push(
+            db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+              .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+          );
 
           count++;
         }
+
+        if (batchStmts.length > 0) {
+          await executeBatches(batchStmts);
+        }
+
         return json({ message: `${count} lecciones importadas con éxito`, courseId: targetCourseId }, 201);
       }
 
@@ -1215,22 +1328,21 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         },
       };
 
-      await db.prepare(`
-        INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          module_id = excluded.module_id,
-          title = excluded.title,
-          description = excluded.description,
-          order_index = excluded.order_index,
-          estimated_minutes = excluded.estimated_minutes
-      `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || 1), Number(lessonData.estimatedMinutes || 15))
-        .run();
-
-      await db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId).run();
-      await db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
-        .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
-        .run();
+      await db.batch([
+        db.prepare(`
+          INSERT INTO lessons (id, course_id, module_id, title, description, order_index, estimated_minutes)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            module_id = excluded.module_id,
+            title = excluded.title,
+            description = excluded.description,
+            order_index = excluded.order_index,
+            estimated_minutes = excluded.estimated_minutes
+        `).bind(lessonId, targetCourseId, moduleId || null, title, lessonData.description || '', Number(lessonData.order || 1), Number(lessonData.estimatedMinutes || 15)),
+        db.prepare('DELETE FROM lesson_content WHERE lesson_id = ?').bind(lessonId),
+        db.prepare('INSERT INTO lesson_content (id, lesson_id, content, version, updated_at) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)')
+          .bind(crypto.randomUUID(), lessonId, JSON.stringify(fullLessonJson))
+      ]);
 
       return json({ message: 'Lección importada con éxito', id: lessonId, courseId: targetCourseId }, 201);
     }

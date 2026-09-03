@@ -228,70 +228,60 @@ export const CourseWizardPage: React.FC = () => {
     );
   };
 
-  // Step 4: Publish Full Course to Backend
+  // Step 4: Publish Full Course to Backend (Single Atomic Request)
   const handlePublishCourse = async () => {
     try {
-      // 1. Create Course
-      const courseRes = await apiFetch<any>('/courses', {
-        method: 'POST',
-        body: JSON.stringify({
+      setIsAnalyzing(true);
+      const payload = {
+        course: {
           title: courseTitle,
           description: courseDescription,
           trackId: courseTrack,
           isPublished: true,
-        }),
-      });
-
-      const courseId = courseRes.id;
-
-      // 2. Create Modules & Lessons
-      for (let i = 0; i < modules.length; i++) {
-        const mod = modules[i];
-        const modRes = await apiFetch<any>('/modules', {
-          method: 'POST',
-          body: JSON.stringify({
-            courseId,
+          modules: modules.map((mod, i) => ({
+            id: mod.id,
             title: mod.title,
             description: mod.description,
-            orderIndex: i + 1,
+            order: i + 1,
             estimatedHours: mod.estimatedHours,
-          }),
-        });
-
-        const moduleId = modRes.id;
-
-        // 3. Upload each lesson
-        for (let j = 0; j < mod.lessons.length; j++) {
-          const les = mod.lessons[j];
-          const lessonJson = les.generatedJson || {
-            version: '1.0',
-            lesson: {
-              id: `les_${courseId.slice(0, 4)}_${i}_${j}`,
-              title: les.title,
-              order: j + 1,
-              estimatedMinutes: les.estimatedMinutes,
-              blocks: [
-                { type: 'heading', id: 'h1', level: 1, content: les.title },
-                { type: 'text', id: 't1', content: 'Contenido interactivo generado para ' + les.title },
-              ],
-            },
-          };
-
-          await apiFetch('/upload/json', {
-            method: 'POST',
-            body: JSON.stringify({
-              courseId,
-              moduleId,
-              jsonContent: lessonJson,
+            lessons: mod.lessons.map((les, j) => {
+              const fullJson = les.generatedJson || {
+                version: '1.0',
+                lesson: {
+                  id: `les_${i + 1}_${j + 1}`,
+                  title: les.title,
+                  order: j + 1,
+                  estimatedMinutes: les.estimatedMinutes,
+                  blocks: [
+                    { type: 'heading', id: 'h1', level: 1, content: les.title },
+                    { type: 'text', id: 't1', content: 'Contenido interactivo generado para ' + les.title },
+                  ],
+                },
+              };
+              return {
+                id: `les_${i + 1}_${j + 1}`,
+                title: les.title,
+                order: j + 1,
+                estimatedMinutes: les.estimatedMinutes,
+                blocks: fullJson.lesson?.blocks || [{ type: 'heading', id: 'h1', level: 1, content: les.title }],
+              };
             }),
-          });
-        }
-      }
+          })),
+        },
+      };
 
+      const res = await apiFetch<any>('/upload/json', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      const courseId = res.courseId;
       alert('¡Curso y módulos publicados con éxito!');
       navigate(`/courses/${courseId}`);
     } catch (err: any) {
       alert(err.message || 'Error al publicar el curso');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
