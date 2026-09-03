@@ -290,41 +290,47 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     try {
       const userTableSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first() as any;
       if (userTableSql && userTableSql.sql && userTableSql.sql.includes("role IN ('ADMIN', 'USER')")) {
-        await db.prepare(`
-          CREATE TABLE IF NOT EXISTS users_v2 (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'USER',
-            is_active INTEGER DEFAULT 1,
-            is_suspended INTEGER DEFAULT 0,
-            theme_preference TEXT DEFAULT 'system',
-            can_use_ai INTEGER DEFAULT 0,
-            ai_daily_limit INTEGER DEFAULT 20,
-            ai_used_today INTEGER DEFAULT 0,
-            ai_last_used_date TEXT DEFAULT '',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          )
-        `).run();
-        await db.prepare(`
-          INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
-            SELECT id, email, password_hash, full_name, role, 
-                   COALESCE(is_active, 1), 
-                   COALESCE(is_suspended, 0), 
-                   COALESCE(theme_preference, 'system'), 
-                   COALESCE(can_use_ai, 0), 
-                   COALESCE(ai_daily_limit, 20), 
-                   COALESCE(ai_used_today, 0), 
-                   COALESCE(ai_last_used_date, ''), 
-                   created_at, updated_at 
-            FROM users
-        `).run();
-        await db.prepare('DROP TABLE users').run();
-        await db.prepare('ALTER TABLE users_v2 RENAME TO users').run();
+        await db.batch([
+          db.prepare('PRAGMA foreign_keys = OFF'),
+          db.prepare(`
+            CREATE TABLE IF NOT EXISTS users_v2 (
+              id TEXT PRIMARY KEY,
+              email TEXT UNIQUE NOT NULL,
+              password_hash TEXT NOT NULL,
+              full_name TEXT NOT NULL,
+              role TEXT NOT NULL DEFAULT 'USER',
+              is_active INTEGER DEFAULT 1,
+              is_suspended INTEGER DEFAULT 0,
+              theme_preference TEXT DEFAULT 'system',
+              can_use_ai INTEGER DEFAULT 0,
+              ai_daily_limit INTEGER DEFAULT 10,
+              ai_used_today INTEGER DEFAULT 0,
+              ai_last_used_date TEXT DEFAULT '',
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `),
+          db.prepare(`
+            INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
+              SELECT id, email, password_hash, full_name, role, 
+                     COALESCE(is_active, 1), 
+                     COALESCE(is_suspended, 0), 
+                     COALESCE(theme_preference, 'system'), 
+                     COALESCE(can_use_ai, 0), 
+                     COALESCE(ai_daily_limit, 10), 
+                     COALESCE(ai_used_today, 0), 
+                     COALESCE(ai_last_used_date, ''), 
+                     created_at, updated_at 
+              FROM users
+          `),
+          db.prepare('DROP TABLE users'),
+          db.prepare('ALTER TABLE users_v2 RENAME TO users'),
+          db.prepare('PRAGMA foreign_keys = ON'),
+        ]);
       }
-    } catch (_) {}
+    } catch (migErr) {
+      console.error('Migration error for users table:', migErr);
+    }
 
     // Auto-promote any approved creator whose role remained 'USER' due to past constraint
     try {
