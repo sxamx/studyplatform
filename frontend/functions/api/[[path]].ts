@@ -288,8 +288,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
     // Safe SQLite CHECK constraint migration for users.role to allow 'CREATOR'
     try {
-      const userTableSql = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").first() as any;
-      if (userTableSql && userTableSql.sql && userTableSql.sql.includes("role IN ('ADMIN', 'USER')")) {
+      const alreadyDone = await db.prepare("SELECT id FROM _schema_creator_v1 WHERE id = 1").first();
+      if (!alreadyDone) {
+        throw new Error('Need migration');
+      }
+    } catch (_) {
+      try {
         await db.batch([
           db.prepare('PRAGMA foreign_keys = OFF'),
           db.prepare(`
@@ -325,11 +329,13 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           `),
           db.prepare('DROP TABLE users'),
           db.prepare('ALTER TABLE users_v2 RENAME TO users'),
+          db.prepare('CREATE TABLE IF NOT EXISTS _schema_creator_v1 (id INTEGER PRIMARY KEY)'),
+          db.prepare('INSERT OR REPLACE INTO _schema_creator_v1 (id) VALUES (1)'),
           db.prepare('PRAGMA foreign_keys = ON'),
         ]);
+      } catch (migErr) {
+        console.error('Migration error for users table:', migErr);
       }
-    } catch (migErr) {
-      console.error('Migration error for users table:', migErr);
     }
 
     // Auto-promote any approved creator whose role remained 'USER' due to past constraint
@@ -1532,7 +1538,54 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         return json({ error: 'No puedes quitarte el rol de Administrador a ti mismo.' }, 400);
       }
 
-      await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
+      try {
+        await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
+      } catch (err: any) {
+        if (err.message && err.message.includes('CHECK constraint failed')) {
+          await db.batch([
+            db.prepare('PRAGMA foreign_keys = OFF'),
+            db.prepare(`
+              CREATE TABLE IF NOT EXISTS users_v2 (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'USER',
+                is_active INTEGER DEFAULT 1,
+                is_suspended INTEGER DEFAULT 0,
+                theme_preference TEXT DEFAULT 'system',
+                can_use_ai INTEGER DEFAULT 0,
+                ai_daily_limit INTEGER DEFAULT 10,
+                ai_used_today INTEGER DEFAULT 0,
+                ai_last_used_date TEXT DEFAULT '',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+              )
+            `),
+            db.prepare(`
+              INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
+                SELECT id, email, password_hash, full_name, role, 
+                       COALESCE(is_active, 1), 
+                       COALESCE(is_suspended, 0), 
+                       COALESCE(theme_preference, 'system'), 
+                       COALESCE(can_use_ai, 0), 
+                       COALESCE(ai_daily_limit, 10), 
+                       COALESCE(ai_used_today, 0), 
+                       COALESCE(ai_last_used_date, ''), 
+                       created_at, updated_at 
+                FROM users
+            `),
+            db.prepare('DROP TABLE users'),
+            db.prepare('ALTER TABLE users_v2 RENAME TO users'),
+            db.prepare('CREATE TABLE IF NOT EXISTS _schema_creator_v1 (id INTEGER PRIMARY KEY)'),
+            db.prepare('INSERT OR REPLACE INTO _schema_creator_v1 (id) VALUES (1)'),
+            db.prepare('PRAGMA foreign_keys = ON'),
+          ]);
+          await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
+        } else {
+          throw err;
+        }
+      }
       return json({ message: `Rol actualizado a ${newRole} exitosamente`, role: newRole });
     }
 
