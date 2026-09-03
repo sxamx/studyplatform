@@ -286,65 +286,19 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       await db.prepare('ALTER TABLE users ADD COLUMN ai_last_used_date VARCHAR(10)').run();
     } catch (_) {}
 
-    // Safe SQLite CHECK constraint migration for users.role to allow 'CREATOR'
-    try {
-      const alreadyDone = await db.prepare("SELECT id FROM _schema_creator_v1 WHERE id = 1").first();
-      if (!alreadyDone) {
-        throw new Error('Need migration');
-      }
-    } catch (_) {
-      try {
-        await db.batch([
-          db.prepare('PRAGMA foreign_keys = OFF'),
-          db.prepare(`
-            CREATE TABLE IF NOT EXISTS users_v2 (
-              id TEXT PRIMARY KEY,
-              email TEXT UNIQUE NOT NULL,
-              password_hash TEXT NOT NULL,
-              full_name TEXT NOT NULL,
-              role TEXT NOT NULL DEFAULT 'USER',
-              is_active INTEGER DEFAULT 1,
-              is_suspended INTEGER DEFAULT 0,
-              theme_preference TEXT DEFAULT 'system',
-              can_use_ai INTEGER DEFAULT 0,
-              ai_daily_limit INTEGER DEFAULT 10,
-              ai_used_today INTEGER DEFAULT 0,
-              ai_last_used_date TEXT DEFAULT '',
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-          `),
-          db.prepare(`
-            INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
-              SELECT id, email, password_hash, full_name, role, 
-                     COALESCE(is_active, 1), 
-                     COALESCE(is_suspended, 0), 
-                     COALESCE(theme_preference, 'system'), 
-                     COALESCE(can_use_ai, 0), 
-                     COALESCE(ai_daily_limit, 10), 
-                     COALESCE(ai_used_today, 0), 
-                     COALESCE(ai_last_used_date, ''), 
-                     created_at, updated_at 
-              FROM users
-          `),
-          db.prepare('DROP TABLE users'),
-          db.prepare('ALTER TABLE users_v2 RENAME TO users'),
-          db.prepare('CREATE TABLE IF NOT EXISTS _schema_creator_v1 (id INTEGER PRIMARY KEY)'),
-          db.prepare('INSERT OR REPLACE INTO _schema_creator_v1 (id) VALUES (1)'),
-          db.prepare('PRAGMA foreign_keys = ON'),
-        ]);
-      } catch (migErr) {
-        console.error('Migration error for users table:', migErr);
-      }
-    }
-
-    // Auto-promote any approved creator whose role remained 'USER' due to past constraint
+    // -------------------------------------------------------------
+    // Creators Table (Decoupled from SQLite users.role CHECK constraint)
+    // -------------------------------------------------------------
     try {
       await db.prepare(`
-        UPDATE users SET role = 'CREATOR' 
-        WHERE role = 'USER' AND id IN (
-          SELECT user_id FROM creator_applications WHERE status = 'approved'
+        CREATE TABLE IF NOT EXISTS creators (
+          user_id TEXT PRIMARY KEY,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
+      `).run();
+      await db.prepare(`
+        INSERT OR IGNORE INTO creators (user_id)
+        SELECT user_id FROM creator_applications WHERE status = 'approved'
       `).run();
     } catch (_) {}
 
@@ -405,7 +359,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       } else if (userCheck.is_suspended === 1 || userCheck.is_active === 0) {
         return json({ error: 'Esta cuenta ha sido suspendida por el administrador.', isSuspended: true }, 403);
       } else {
-        currentUser.role = userCheck.role;
+        let effRole = userCheck.role;
+        if (effRole === 'USER') {
+          const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(currentUser.id).first();
+          if (isCr) effRole = 'CREATOR';
+        }
+        currentUser.role = effRole;
       }
     }
 
@@ -455,11 +414,17 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       await db.prepare('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
 
+      let effRole = user.role;
+      if (effRole === 'USER') {
+        const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(user.id).first();
+        if (isCr) effRole = 'CREATOR';
+      }
+
       const userObj = {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        role: user.role,
+        role: effRole,
         themePreference: user.theme_preference,
       };
       const authToken = await signJwt(userObj, env.JWT_SECRET);
@@ -473,12 +438,19 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
       const user = await db.prepare('SELECT id, email, full_name, role, theme_preference FROM users WHERE id = ?').bind(currentUser.id).first() as any;
       if (!user) return json({ error: 'Usuario no encontrado' }, 404);
+
+      let effRole = user.role;
+      if (effRole === 'USER') {
+        const isCr = await db.prepare('SELECT 1 FROM creators WHERE user_id = ?').bind(user.id).first();
+        if (isCr) effRole = 'CREATOR';
+      }
+
       return json({
         user: {
           id: user.id,
           email: user.email,
           fullName: user.full_name,
-          role: user.role,
+          role: effRole,
           themePreference: user.theme_preference,
         },
       });
@@ -1503,7 +1475,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path === '/admin/users' && method === 'GET') {
       if (!currentUser || currentUser.role !== 'ADMIN') return json({ error: 'Acceso denegado' }, 403);
       const usersRes = await db.prepare(`
-        SELECT u.id, u.email, u.full_name as fullName, u.role, u.theme_preference as themePreference,
+        SELECT u.id, u.email, u.full_name as fullName, 
+          CASE WHEN c.user_id IS NOT NULL AND u.role != 'ADMIN' THEN 'CREATOR' ELSE u.role END as role,
+          u.theme_preference as themePreference,
           COALESCE(u.is_active, 1) as isActive, COALESCE(u.is_suspended, 0) as isSuspended,
           COALESCE(u.can_use_ai, 0) as canUseAi, COALESCE(u.ai_daily_limit, 10) as aiDailyLimit,
           u.created_at as createdAt,
@@ -1517,6 +1491,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           (SELECT COUNT(l.id) FROM lessons l WHERE l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as totalEnrolledLessons,
           (SELECT COUNT(DISTINCT up.lesson_id) FROM user_progress up JOIN lessons l ON l.id = up.lesson_id WHERE up.user_id = u.id AND up.completed = 1 AND l.course_id IN (SELECT course_id FROM user_course_preferences WHERE user_id = u.id)) as completedLessons
         FROM users u
+        LEFT JOIN creators c ON u.id = c.user_id
         ORDER BY u.created_at DESC
       `).all();
       return json({ users: usersRes.results || [] });
@@ -1538,54 +1513,17 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         return json({ error: 'No puedes quitarte el rol de Administrador a ti mismo.' }, 400);
       }
 
-      try {
-        await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
-      } catch (err: any) {
-        if (err.message && err.message.includes('CHECK constraint failed')) {
-          await db.batch([
-            db.prepare('PRAGMA foreign_keys = OFF'),
-            db.prepare(`
-              CREATE TABLE IF NOT EXISTS users_v2 (
-                id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                full_name TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'USER',
-                is_active INTEGER DEFAULT 1,
-                is_suspended INTEGER DEFAULT 0,
-                theme_preference TEXT DEFAULT 'system',
-                can_use_ai INTEGER DEFAULT 0,
-                ai_daily_limit INTEGER DEFAULT 10,
-                ai_used_today INTEGER DEFAULT 0,
-                ai_last_used_date TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-              )
-            `),
-            db.prepare(`
-              INSERT OR REPLACE INTO users_v2 (id, email, password_hash, full_name, role, is_active, is_suspended, theme_preference, can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, created_at, updated_at)
-                SELECT id, email, password_hash, full_name, role, 
-                       COALESCE(is_active, 1), 
-                       COALESCE(is_suspended, 0), 
-                       COALESCE(theme_preference, 'system'), 
-                       COALESCE(can_use_ai, 0), 
-                       COALESCE(ai_daily_limit, 10), 
-                       COALESCE(ai_used_today, 0), 
-                       COALESCE(ai_last_used_date, ''), 
-                       created_at, updated_at 
-                FROM users
-            `),
-            db.prepare('DROP TABLE users'),
-            db.prepare('ALTER TABLE users_v2 RENAME TO users'),
-            db.prepare('CREATE TABLE IF NOT EXISTS _schema_creator_v1 (id INTEGER PRIMARY KEY)'),
-            db.prepare('INSERT OR REPLACE INTO _schema_creator_v1 (id) VALUES (1)'),
-            db.prepare('PRAGMA foreign_keys = ON'),
-          ]);
-          await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(newRole, targetUserId).run();
-        } else {
-          throw err;
-        }
+      if (newRole === 'CREATOR') {
+        await db.prepare('INSERT OR REPLACE INTO creators (user_id) VALUES (?)').bind(targetUserId).run();
+        try { await db.prepare('UPDATE users SET role = "USER", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run(); } catch (_) {}
+      } else if (newRole === 'ADMIN') {
+        await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run();
+        await db.prepare('UPDATE users SET role = "ADMIN", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run();
+      } else if (newRole === 'USER') {
+        await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run();
+        await db.prepare('UPDATE users SET role = "USER", updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(targetUserId).run();
       }
+
       return json({ message: `Rol actualizado a ${newRole} exitosamente`, role: newRole });
     }
 
@@ -1645,6 +1583,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       }
 
       // Cleanup user dependencies
+      try { await db.prepare('DELETE FROM creators WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM creator_applications WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
       try { await db.prepare('DELETE FROM course_collaborators WHERE user_id = ? OR invited_by = ?').bind(targetUserId, targetUserId).run(); } catch (_) {}
       await db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId).run();
