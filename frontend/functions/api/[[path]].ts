@@ -699,8 +699,12 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path.startsWith('/courses/') && path.endsWith('/enroll') && method === 'POST') {
       if (!currentUser) return json({ error: 'Debes iniciar sesión para inscribirte' }, 401);
       const courseId = path.replace('/courses/', '').replace('/enroll', '');
-      const course = await db.prepare('SELECT id FROM courses WHERE id = ?').bind(courseId).first() as any;
+      const course = await db.prepare('SELECT id, is_published, approval_status FROM courses WHERE id = ?').bind(courseId).first() as any;
       if (!course) return json({ error: 'Curso no encontrado' }, 404);
+      if ((!course.is_published || course.approval_status === 'pending' || course.approval_status === 'rejected')
+        && !(await canManageCourse(courseId, currentUser, db))) {
+        return json({ error: 'Este curso todavía no está disponible para inscripción' }, 403);
+      }
 
       await db.prepare(`
         INSERT INTO user_course_preferences (id, user_id, course_id, status, updated_at)
@@ -715,6 +719,10 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const courseId = path.replace('/courses/', '');
       const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
       if (!course) return json({ error: 'Curso no encontrado' }, 404);
+      const isPublicCourse = Boolean(course.is_published) && !['pending', 'rejected'].includes(course.approval_status);
+      if (!isPublicCourse && !(await canManageCourse(courseId, currentUser, db))) {
+        return json({ error: 'Curso no encontrado' }, 404);
+      }
 
       const [modulesRes, lessonsRes, upRes] = await Promise.all([
         db.prepare('SELECT * FROM modules WHERE course_id = ? ORDER BY order_index ASC').bind(courseId).all(),
@@ -967,6 +975,15 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       `).bind(lessonId).first() as any;
 
       if (!lesson) return json({ error: 'Lección no encontrada' }, 404);
+
+      if (!currentUser) return json({ error: 'Debes iniciar sesión para acceder a esta lección' }, 401);
+      const canManage = await canManageCourse(lesson.course_id, currentUser, db);
+      if (!canManage) {
+        const enrollment = await db.prepare(
+          'SELECT id FROM user_course_preferences WHERE user_id = ? AND course_id = ?'
+        ).bind(currentUser.id, lesson.course_id).first();
+        if (!enrollment) return json({ error: 'Debes inscribirte para acceder a esta lección' }, 403);
+      }
 
       let parsedContent: any = null;
       try {
@@ -1431,6 +1448,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         FROM courses c
         LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
         WHERE c.is_published = 1
+          AND COALESCE(c.approval_status, 'approved') = 'approved'
         ORDER BY c.order_index ASC, c.created_at DESC
       `).all();
 
@@ -1484,7 +1502,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           COALESCE(mc.published_at, c.created_at) as published_at
         FROM courses c
         LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
-        WHERE c.id = ? OR mc.id = ?
+        WHERE (c.id = ? OR mc.id = ?)
+          AND c.is_published = 1
+          AND COALESCE(c.approval_status, 'approved') = 'approved'
       `).bind(marketId, marketId).first() as any;
 
       if (!item) return json({ error: 'Curso de marketplace no encontrado' }, 404);
@@ -1554,7 +1574,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
           COALESCE(mc.price, 0) as price, COALESCE(mc.currency, 'USD') as currency
         FROM courses c
         LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
-        WHERE c.id = ? OR mc.id = ?
+        WHERE (c.id = ? OR mc.id = ?)
+          AND c.is_published = 1
+          AND COALESCE(c.approval_status, 'approved') = 'approved'
       `).bind(marketId, marketId).first() as any;
       if (!item) return json({ error: 'Curso no encontrado' }, 404);
 
@@ -1609,7 +1631,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         SELECT mc.id as listing_id, c.id as course_id
         FROM courses c
         LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
-        WHERE c.id = ? OR mc.id = ?
+        WHERE (c.id = ? OR mc.id = ?)
+          AND c.is_published = 1
+          AND COALESCE(c.approval_status, 'approved') = 'approved'
       `).bind(marketId, marketId).first() as any;
       if (!item) return json({ error: 'Curso no encontrado' }, 404);
 
