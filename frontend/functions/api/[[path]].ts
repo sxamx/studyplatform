@@ -1848,38 +1848,61 @@ export async function onRequest(context: { request: Request; env: Env; params: {
 
       const actionCourses = url.searchParams.get('actionCourses') || 'adopt';
       const newCreatorId = url.searchParams.get('newCreatorId');
+      const deletionStatements: any[] = [];
 
       if (actionCourses === 'adopt') {
-        // Adopt courses for Admin
-        await db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(currentUser.id, targetUserId).run();
+        deletionStatements.push(
+          db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(currentUser.id, targetUserId),
+          db.prepare('UPDATE marketplace_courses SET creator_id = ? WHERE creator_id = ?').bind(currentUser.id, targetUserId),
+        );
       } else if (actionCourses === 'reassign' && newCreatorId) {
-        // Reassign to another creator
-        await db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(newCreatorId, targetUserId).run();
+        const replacement = await db.prepare('SELECT id FROM users WHERE id = ?').bind(newCreatorId).first();
+        if (!replacement) return json({ error: 'El nuevo creador no existe' }, 400);
+        deletionStatements.push(
+          db.prepare('UPDATE courses SET created_by = ? WHERE created_by = ?').bind(newCreatorId, targetUserId),
+          db.prepare('UPDATE marketplace_courses SET creator_id = ? WHERE creator_id = ?').bind(newCreatorId, targetUserId),
+        );
       } else if (actionCourses === 'delete') {
-        // Delete courses created by this user
-        const userCourses = await db.prepare('SELECT id FROM courses WHERE created_by = ?').bind(targetUserId).all();
-        for (const c of (userCourses.results || []) as any[]) {
-          try { await db.prepare('DELETE FROM course_reviews WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM course_ai_messages WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM course_collaborators WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM marketplace_courses WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM user_course_preferences WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM user_progress WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM user_progress WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT id FROM lessons WHERE course_id = ?)').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM lessons WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM modules WHERE course_id = ?').bind(c.id).run(); } catch (_) {}
-          try { await db.prepare('DELETE FROM courses WHERE id = ?').bind(c.id).run(); } catch (_) {}
-        }
+        deletionStatements.push(
+          db.prepare('DELETE FROM marketplace_reviews WHERE marketplace_course_id IN (SELECT mc.id FROM marketplace_courses mc JOIN courses c ON c.id = mc.course_id WHERE c.created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM marketplace_purchases WHERE marketplace_course_id IN (SELECT mc.id FROM marketplace_courses mc JOIN courses c ON c.id = mc.course_id WHERE c.created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM marketplace_courses WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM course_reviews WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM course_ai_messages WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM course_collaborators WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM user_course_preferences WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM user_progress WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM lesson_content WHERE lesson_id IN (SELECT l.id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE c.created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM lessons WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM modules WHERE course_id IN (SELECT id FROM courses WHERE created_by = ?)').bind(targetUserId),
+          db.prepare('DELETE FROM courses WHERE created_by = ?').bind(targetUserId),
+        );
+      } else {
+        return json({ error: 'Acción para los cursos no válida' }, 400);
       }
 
-      // Cleanup user dependencies
-      try { await db.prepare('DELETE FROM creator_badges WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
-      try { await db.prepare('DELETE FROM creator_applications WHERE user_id = ?').bind(targetUserId).run(); } catch (_) {}
-      try { await db.prepare('DELETE FROM course_collaborators WHERE user_id = ? OR invited_by = ?').bind(targetUserId, targetUserId).run(); } catch (_) {}
-      await db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId).run();
-      await db.prepare('DELETE FROM user_course_preferences WHERE user_id = ?').bind(targetUserId).run();
-      await db.prepare('DELETE FROM users WHERE id = ?').bind(targetUserId).run();
+      // Explicit cleanup is required for old D1 databases whose foreign keys were
+      // created without ON DELETE CASCADE. Keep child rows before their parents.
+      deletionStatements.push(
+        db.prepare('DELETE FROM application_messages WHERE sender_id = ? OR application_id IN (SELECT id FROM creator_applications WHERE user_id = ?)').bind(targetUserId, targetUserId),
+        db.prepare('DELETE FROM creator_applications WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM creator_badges WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM course_reviews WHERE creator_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM notifications WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM course_ai_messages WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM course_collaborators WHERE user_id = ? OR invited_by = ?').bind(targetUserId, targetUserId),
+        db.prepare('DELETE FROM marketplace_reviews WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM marketplace_purchases WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM audit_log WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM user_progress WHERE user_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM user_course_preferences WHERE user_id = ?').bind(targetUserId),
+        db.prepare('UPDATE media SET uploaded_by = NULL WHERE uploaded_by = ?').bind(targetUserId),
+        db.prepare('UPDATE marketplace_courses SET creator_id = NULL WHERE creator_id = ?').bind(targetUserId),
+        db.prepare('DELETE FROM users WHERE id = ?').bind(targetUserId),
+      );
+
+      await db.batch(deletionStatements);
 
       return json({ message: 'Cuenta de usuario eliminada de forma segura' });
     }
