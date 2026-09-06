@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Trash2, Shield, Copy, Check } from 'lucide-react';
+import { RefreshCw, Shield, Copy, Check } from 'lucide-react';
 import { apiFetch } from '../../api/client';
 import { Modal } from '../shared/Modal';
 import { Button } from '../shared/Button';
@@ -44,16 +44,6 @@ export const AdminLogsModal: React.FC<AdminLogsModalProps> = ({ isOpen, onClose 
       fetchLogs();
     }
   }, [isOpen]);
-
-  const handleClearLogs = async () => {
-    if (!window.confirm('¿Deseas vaciar el historial de logs en memoria?')) return;
-    try {
-      await apiFetch('/admin/logs/clear', { method: 'POST' });
-      setLogs([]);
-    } catch (err) {
-      alert('Error al vaciar logs');
-    }
-  };
 
   const handleCopyLog = async (log: LogEntry) => {
     await navigator.clipboard.writeText(JSON.stringify(log, null, 2));
@@ -145,14 +135,6 @@ export const AdminLogsModal: React.FC<AdminLogsModalProps> = ({ isOpen, onClose 
               leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
             >
               Actualizar
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearLogs}
-              leftIcon={<Trash2 className="w-3.5 h-3.5 text-rose-500" />}
-            >
-              Vaciar
             </Button>
           </div>
         </div>

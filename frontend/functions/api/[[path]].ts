@@ -1,6 +1,8 @@
 // Cloudflare Pages Function - Complete Native Edge API Router with D1 Database Support
 // Handles all /api/v1/* routes natively at the Edge on Cloudflare Pages
 
+import bcrypt from 'bcryptjs';
+
 interface Env {
   DB?: D1Database;
   JWT_SECRET?: string;
@@ -26,7 +28,7 @@ async function hashPassword(password: string): Promise<string> {
 
 async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
-    return password.length >= 6;
+    return bcrypt.compare(password, storedHash);
   }
   const parts = storedHash.split(':');
   if (parts.length !== 3 || parts[0] !== 'pbkdf2') return false;
@@ -77,9 +79,42 @@ function base64UrlToText(base64Url: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+async function getSecretEncryptionKey(secret?: string): Promise<CryptoKey> {
+  if (!secret) throw new Error('JWT_SECRET no está configurado en Cloudflare');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptSecret(value: string, secret?: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await getSecretEncryptionKey(secret);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(value),
+  );
+  return `enc:v1:${uint8ArrayToBase64Url(iv)}:${uint8ArrayToBase64Url(new Uint8Array(encrypted))}`;
+}
+
+async function decryptSecret(value: string, secret?: string): Promise<string> {
+  // Existing installations stored the provider key as plain text. It remains
+  // readable until an administrator saves the settings once, which migrates it.
+  if (!value.startsWith('enc:v1:')) return value;
+  const [, , ivValue, encryptedValue] = value.split(':');
+  if (!ivValue || !encryptedValue) throw new Error('Formato de secreto cifrado inválido');
+  const key = await getSecretEncryptionKey(secret);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64UrlToUint8Array(ivValue) },
+    key,
+    base64UrlToUint8Array(encryptedValue),
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
 // 2. JWT Generation & Verification using Web Crypto HMAC-SHA256
 async function signJwt(payload: any, secret?: string): Promise<string> {
-  const effectiveSecret = secret || 'studyplatform-production-secret-key-2026';
+  if (!secret) throw new Error('JWT_SECRET no está configurado en Cloudflare');
+  const effectiveSecret = secret;
   const header = { alg: 'HS256', typ: 'JWT' };
   // 30 days token duration for seamless cross-device persistence
   const expPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 };
@@ -101,7 +136,8 @@ async function signJwt(payload: any, secret?: string): Promise<string> {
 
 async function verifyJwt(token: string, secret?: string): Promise<any | null> {
   try {
-    const effectiveSecret = secret || 'studyplatform-production-secret-key-2026';
+    if (!secret) return null;
+    const effectiveSecret = secret;
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const data = `${parts[0]}.${parts[1]}`;
@@ -129,8 +165,10 @@ async function verifyJwt(token: string, secret?: string): Promise<any | null> {
   }
 }
 
-// Global Isolate Cache for D1 Schema Migrations & Indexes
-let isSchemaInitialized = false;
+// One shared initialization promise per isolate prevents requests from racing while
+// the compatibility schema is checked. A rejected promise is cleared so a later
+// request can retry instead of leaving the isolate permanently half-initialized.
+let schemaInitialization: Promise<void> | null = null;
 
 // Sliding-window In-Memory Rate Limiter (Brute-force protection)
 const ipRateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -150,7 +188,17 @@ function checkRateLimit(key: string, maxAttempts = 15, windowMs = 5 * 60 * 1000)
 
 // Ensure Schema & High-Performance Indexes Run ONCE per worker isolate
 async function ensureSchemaOnce(db: D1Database): Promise<void> {
-  if (isSchemaInitialized) return;
+  if (schemaInitialization) return schemaInitialization;
+
+  schemaInitialization = initializeSchema(db).catch((error) => {
+    schemaInitialization = null;
+    throw error;
+  });
+
+  return schemaInitialization;
+}
+
+async function initializeSchema(db: D1Database): Promise<void> {
 
   // 1. New Columns
   const colMigrations = [
@@ -165,12 +213,15 @@ async function ensureSchemaOnce(db: D1Database): Promise<void> {
     'ALTER TABLE users ADD COLUMN ai_last_used_date TEXT DEFAULT ""',
   ];
   for (const q of colMigrations) {
-    try { await db.prepare(q).run(); } catch (_) {}
+    try {
+      await db.prepare(q).run();
+    } catch (error: any) {
+      if (!String(error?.message || error).toLowerCase().includes('duplicate column')) throw error;
+    }
   }
 
   // 2. Tables & Constraints
-  try {
-    await db.batch([
+  const tableMigrations = [
       db.prepare(`
         CREATE TABLE IF NOT EXISTS creator_badges (
           user_id TEXT PRIMARY KEY,
@@ -281,12 +332,11 @@ async function ensureSchemaOnce(db: D1Database): Promise<void> {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `),
-    ]);
-  } catch (_) {}
+    ];
+  for (const statement of tableMigrations) await statement.run();
 
   // 3. High-Performance Composite B-Tree Indexes
-  try {
-    await db.batch([
+  const indexMigrations = [
       db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id)'),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_module ON lessons(module_id)'),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_lessons_order ON lessons(course_id, order_index)'),
@@ -300,10 +350,22 @@ async function ensureSchemaOnce(db: D1Database): Promise<void> {
       db.prepare('CREATE INDEX IF NOT EXISTS idx_collab_course_user ON course_collaborators(course_id, user_id, status)'),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_creator_badges_user ON creator_badges(user_id)'),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_course_ai_course ON course_ai_messages(course_id, created_at)'),
-    ]);
-  } catch (_) {}
+    ];
+  for (const statement of indexMigrations) await statement.run();
 
-  isSchemaInitialized = true;
+  const requiredTables = [
+    'creator_badges', 'creator_applications', 'application_messages', 'course_reviews',
+    'notifications', 'notification_preferences', 'course_ai_messages',
+    'course_collaborators', 'system_ai_settings',
+  ];
+  const tables = await db.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => '?').join(',')})`
+  ).bind(...requiredTables).all();
+  const existingTables = new Set((tables.results || []).map((row: any) => row.name));
+  const missingTables = requiredTables.filter((table) => !existingTables.has(table));
+  if (missingTables.length > 0) {
+    throw new Error(`Migración D1 incompleta. Faltan tablas: ${missingTables.join(', ')}`);
+  }
 }
 
 // Course Ownership & Collaboration Authorization Helper (Zero IDOR)
@@ -647,7 +709,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ message: 'Inscripción exitosa', courseId });
     }
 
-    if (path.startsWith('/courses/') && method === 'GET') {
+    if (/^\/courses\/[^/]+$/.test(path) && method === 'GET') {
       const courseId = path.replace('/courses/', '');
       const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
       if (!course) return json({ error: 'Curso no encontrado' }, 404);
@@ -723,7 +785,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       });
     }
 
-    if (path.startsWith('/courses/') && method === 'PUT') {
+    if (/^\/courses\/[^/]+$/.test(path) && method === 'PUT') {
       const courseId = path.replace('/courses/', '');
       const allowed = await canManageCourse(courseId, currentUser, db);
       if (!allowed) return json({ error: 'Acceso denegado: se requieren permisos sobre este curso' }, 403);
@@ -755,7 +817,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ id: courseId, title, message: 'Curso actualizado exitosamente' });
     }
 
-    if (path.startsWith('/courses/') && method === 'DELETE') {
+    if (/^\/courses\/[^/]+$/.test(path) && method === 'DELETE') {
       const courseId = path.replace('/courses/', '');
       const course = await db.prepare('SELECT * FROM courses WHERE id = ?').bind(courseId).first() as any;
       if (!course) return json({ error: 'Curso no encontrado' }, 404);
@@ -814,7 +876,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ id, courseId, title, description, orderIndex: orderIndex || 1, estimatedHours: estimatedHours || 5 }, 201);
     }
 
-    if (path.startsWith('/modules/') && method === 'PUT') {
+    if (/^\/modules\/[^/]+$/.test(path) && method === 'PUT') {
       if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const moduleId = path.replace('/modules/', '');
       const mod = await db.prepare('SELECT course_id FROM modules WHERE id = ?').bind(moduleId).first() as any;
@@ -839,7 +901,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ message: 'Módulo actualizado con éxito' });
     }
 
-    if (path.startsWith('/modules/') && method === 'DELETE') {
+    if (/^\/modules\/[^/]+$/.test(path) && method === 'DELETE') {
       if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const moduleId = path.replace('/modules/', '');
       const mod = await db.prepare('SELECT course_id FROM modules WHERE id = ?').bind(moduleId).first() as any;
@@ -892,7 +954,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ id: lessonId, title, courseId, moduleId }, 201);
     }
 
-    if (path.startsWith('/lessons/') && method === 'GET') {
+    if (/^\/lessons\/[^/]+$/.test(path) && method === 'GET') {
       const lessonId = path.replace('/lessons/', '');
       const lesson = await db.prepare(`
         SELECT l.*, c.title as course_title, lc.content
@@ -950,7 +1012,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       });
     }
 
-    if (path.startsWith('/lessons/') && method === 'PUT') {
+    if (/^\/lessons\/[^/]+$/.test(path) && method === 'PUT') {
       if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const lessonId = path.replace('/lessons/', '');
       const les = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
@@ -985,7 +1047,7 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       return json({ message: 'Lección actualizada con éxito', id: lessonId });
     }
 
-    if (path.startsWith('/lessons/') && method === 'DELETE') {
+    if (/^\/lessons\/[^/]+$/.test(path) && method === 'DELETE') {
       if (!currentUser) return json({ error: 'Acceso denegado' }, 401);
       const lessonId = path.replace('/lessons/', '');
       const les = await db.prepare('SELECT course_id FROM lessons WHERE id = ?').bind(lessonId).first() as any;
@@ -1450,6 +1512,18 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         isPurchased = Boolean(pref);
       }
 
+      const reviewsRes = await db.prepare(`
+        SELECT mr.id, mr.user_id as userId, COALESCE(u.full_name, 'Estudiante') as userName,
+          mr.rating, mr.review_text as reviewText, mr.created_at as createdAt
+        FROM marketplace_reviews mr
+        LEFT JOIN users u ON u.id = mr.user_id
+        WHERE mr.marketplace_course_id IN (
+          SELECT id FROM marketplace_courses WHERE course_id = ?
+        )
+        ORDER BY mr.created_at DESC
+        LIMIT 50
+      `).bind(item.course_id).all();
+
       return json({
         id: item.id,
         courseId: item.course_id,
@@ -1466,31 +1540,110 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         isPurchased,
         modules,
         lessons,
+        reviews: reviewsRes.results || [],
       });
     }
 
-    if (path.includes('/buy') && method === 'POST') {
+    if (path.startsWith('/marketplace/courses/') && path.endsWith('/buy') && method === 'POST') {
       if (!currentUser) return json({ error: 'Debes iniciar sesión para inscribirte' }, 401);
       const marketId = path.split('/marketplace/courses/')[1]?.split('/buy')[0];
       const item = await db.prepare(`
-        SELECT COALESCE(mc.id, c.id) as id, c.id as course_id
+        SELECT mc.id as listing_id, c.id as course_id, c.title, c.description, c.thumbnail_url,
+          COALESCE(mc.price, 0) as price, COALESCE(mc.currency, 'USD') as currency
         FROM courses c
         LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
         WHERE c.id = ? OR mc.id = ?
       `).bind(marketId, marketId).first() as any;
       if (!item) return json({ error: 'Curso no encontrado' }, 404);
 
-      await db.prepare(`
-        INSERT INTO user_course_preferences (id, user_id, course_id, status)
-        VALUES (?, ?, ?, 'in_progress')
-        ON CONFLICT(user_id, course_id) DO NOTHING
-      `).bind(crypto.randomUUID(), currentUser.id, item.course_id).run();
+      const listingId = item.listing_id || item.course_id;
+      if (!item.listing_id) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO marketplace_courses
+            (id, course_id, creator_id, title, description, thumbnail_url, price, currency)
+          SELECT ?, id, created_by, title, description, thumbnail_url, 0, 'USD'
+          FROM courses WHERE id = ?
+        `).bind(listingId, item.course_id).run();
+      }
+
+      const existingPurchase = await db.prepare(
+        'SELECT id FROM marketplace_purchases WHERE user_id = ? AND marketplace_course_id = ?'
+      ).bind(currentUser.id, listingId).first();
+
+      if (!existingPurchase) {
+        await db.batch([
+          db.prepare(`
+            INSERT INTO marketplace_purchases
+              (id, user_id, marketplace_course_id, price_paid, currency)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(crypto.randomUUID(), currentUser.id, listingId, Number(item.price || 0), item.currency || 'USD'),
+          db.prepare(`
+            INSERT INTO user_course_preferences (id, user_id, course_id, status)
+            VALUES (?, ?, ?, 'in_progress')
+            ON CONFLICT(user_id, course_id) DO NOTHING
+          `).bind(crypto.randomUUID(), currentUser.id, item.course_id),
+          db.prepare('UPDATE marketplace_courses SET purchase_count = purchase_count + 1 WHERE id = ?').bind(listingId),
+        ]);
+      }
+
+      return json({
+        message: existingPurchase ? 'Ya estabas inscrito en este curso' : 'Inscripción exitosa',
+        courseId: item.course_id,
+        alreadyEnrolled: Boolean(existingPurchase),
+      });
+    }
+
+    if (path.startsWith('/marketplace/courses/') && path.endsWith('/reviews') && method === 'POST') {
+      if (!currentUser) return json({ error: 'Debes iniciar sesión para publicar una reseña' }, 401);
+      const marketId = path.split('/marketplace/courses/')[1]?.split('/reviews')[0];
+      const body = await request.json() as any;
+      const rating = Number(body.rating);
+      const reviewText = typeof body.reviewText === 'string' ? body.reviewText.trim() : '';
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return json({ error: 'La calificación debe ser un número entero entre 1 y 5' }, 400);
+      }
+
+      const item = await db.prepare(`
+        SELECT mc.id as listing_id, c.id as course_id
+        FROM courses c
+        LEFT JOIN marketplace_courses mc ON mc.course_id = c.id
+        WHERE c.id = ? OR mc.id = ?
+      `).bind(marketId, marketId).first() as any;
+      if (!item) return json({ error: 'Curso no encontrado' }, 404);
+
+      const enrollment = await db.prepare(
+        'SELECT id FROM user_course_preferences WHERE user_id = ? AND course_id = ?'
+      ).bind(currentUser.id, item.course_id).first();
+      if (!enrollment) return json({ error: 'Debes inscribirte antes de publicar una reseña' }, 403);
+
+      const listingId = item.listing_id || item.course_id;
+      if (!item.listing_id) {
+        await db.prepare(`
+          INSERT OR IGNORE INTO marketplace_courses
+            (id, course_id, creator_id, title, description, thumbnail_url, price, currency)
+          SELECT id, id, created_by, title, description, thumbnail_url, 0, 'USD'
+          FROM courses WHERE id = ?
+        `).bind(item.course_id).run();
+      }
 
       await db.prepare(`
-        UPDATE marketplace_courses SET purchase_count = purchase_count + 1 WHERE id = ? OR course_id = ?
-      `).bind(item.id, item.course_id).run();
+        INSERT INTO marketplace_reviews (id, marketplace_course_id, user_id, rating, review_text)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, marketplace_course_id) DO UPDATE SET
+          rating = excluded.rating,
+          review_text = excluded.review_text,
+          created_at = CURRENT_TIMESTAMP
+      `).bind(crypto.randomUUID(), listingId, currentUser.id, rating, reviewText).run();
 
-      return json({ message: 'Inscripción exitosa', courseId: item.course_id });
+      await db.prepare(`
+        UPDATE marketplace_courses
+        SET average_rating = COALESCE((
+          SELECT AVG(rating) FROM marketplace_reviews WHERE marketplace_course_id = ?
+        ), 0)
+        WHERE id = ?
+      `).bind(listingId, listingId).run();
+
+      return json({ message: 'Reseña publicada con éxito' }, 201);
     }
 
     // -------------------------------------------------------------
@@ -2501,6 +2654,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path.startsWith('/ai/courses/') && path.endsWith('/messages') && method === 'GET') {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
       const courseId = path.replace('/ai/courses/', '').replace('/messages', '');
+      if (!(await canManageCourse(courseId, currentUser, db))) {
+        return json({ error: 'No tienes permisos para usar el copiloto en este curso' }, 403);
+      }
 
       const userRow = await db.prepare('SELECT can_use_ai, ai_daily_limit, ai_used_today, ai_last_used_date, role FROM users WHERE id = ?').bind(currentUser.id).first() as any;
       const today = new Date().toISOString().split('T')[0];
@@ -2531,6 +2687,9 @@ export async function onRequest(context: { request: Request; env: Env; params: {
     if (path.startsWith('/ai/courses/') && path.endsWith('/chat') && method === 'POST') {
       if (!currentUser) return json({ error: 'No autenticado' }, 401);
       const courseId = path.replace('/ai/courses/', '').replace('/chat', '');
+      if (!(await canManageCourse(courseId, currentUser, db))) {
+        return json({ error: 'No tienes permisos para usar el copiloto en este curso' }, 403);
+      }
       const body = await request.json() as any;
       const { prompt } = body;
       if (!prompt || !prompt.trim()) return json({ error: 'El mensaje es requerido' }, 400);
@@ -2615,10 +2774,11 @@ Explica con claridad pedagógica, entrega siempre bloques de código bien format
             { role: 'system', content: systemPrompt },
             ...(historyRes.results || []).map((m: any) => ({ role: m.role, content: m.content })),
           ];
+          const providerApiKey = await decryptSecret(aiSettings.api_key_encrypted, env.JWT_SECRET);
           let endpoint = 'https://api.groq.com/openai/v1/chat/completions';
           const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${aiSettings.api_key_encrypted}`,
+            'Authorization': `Bearer ${providerApiKey}`,
           };
           if (aiSettings.provider === 'gemini') {
             endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
@@ -2755,7 +2915,7 @@ Explica con claridad pedagógica, entrega siempre bloques de código bien format
       let keyMasked = current?.api_key_masked || '';
 
       if (apiKey && typeof apiKey === 'string' && !apiKey.includes('••••')) {
-        keyEncrypted = apiKey.trim();
+        keyEncrypted = await encryptSecret(apiKey.trim(), env.JWT_SECRET);
         const raw = apiKey.trim();
         keyMasked = raw.length > 8 ? `${raw.slice(0, 4)}••••••••${raw.slice(-4)}` : '••••••••';
       }
