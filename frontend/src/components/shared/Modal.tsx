@@ -19,6 +19,7 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth,
   size = 'md',
 }) => {
+  const titleId = React.useId();
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -48,18 +49,23 @@ export const Modal: React.FC<ModalProps> = ({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[9999] w-screen h-screen min-h-screen min-w-full flex items-center justify-center p-3 sm:p-6 bg-black/65 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] w-screen h-[100dvh] min-w-full flex items-center justify-center p-3 pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:p-6 bg-black/65 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
         className={`w-full ${maxWidthStyles[effectiveSize]} bg-white dark:bg-[#1A1A1A] border border-[#E0E0E0] dark:border-[#2D2D2D] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 relative z-10`}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0E0E0] dark:border-[#2D2D2D] bg-white/50 dark:bg-[#1A1A1A]/50">
-          <h3 className="text-lg font-bold text-[#1A1A1A] dark:text-white truncate pr-4">{title}</h3>
+          <h3 id={titleId} className="text-lg font-bold text-[#1A1A1A] dark:text-white truncate pr-4">{title}</h3>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white hover:bg-[#F5F5F5] dark:hover:bg-[#242424] transition-colors shrink-0"
+            aria-label="Cerrar diálogo"
+            className="min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg text-[#666666] hover:text-[#1A1A1A] dark:text-[#B0B0B0] dark:hover:text-white hover:bg-[#F5F5F5] dark:hover:bg-[#242424] transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

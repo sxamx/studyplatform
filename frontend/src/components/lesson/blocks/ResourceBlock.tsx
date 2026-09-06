@@ -2,6 +2,7 @@ import React from 'react';
 import { ResourceBlock as IResourceBlock } from '../../../types';
 import { Download, FileText, ExternalLink, Archive, Code } from 'lucide-react';
 import { Button } from '../../shared/Button';
+import { safeHttpUrl } from '../../../utils/safeUrl';
 
 interface ResourceBlockProps {
   block: IResourceBlock;
@@ -9,6 +10,7 @@ interface ResourceBlockProps {
 
 export const ResourceBlock: React.FC<ResourceBlockProps> = ({ block }) => {
   const fileType = (block.fileType || 'file').toLowerCase();
+  const safeUrl = safeHttpUrl(block.url);
 
   const getIcon = () => {
     if (fileType.includes('pdf') || fileType.includes('doc')) return <FileText className="w-5 h-5 text-rose-500" />;
@@ -45,22 +47,26 @@ export const ResourceBlock: React.FC<ResourceBlockProps> = ({ block }) => {
         </div>
       </div>
 
-      <a
-        href={block.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        download
-        className="shrink-0 w-full sm:w-auto"
-      >
-        <Button
-          variant="outline"
-          size="sm"
-          rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
-          className="w-full sm:w-auto font-bold"
+      {safeUrl ? (
+        <a
+          href={safeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          download
+          className="shrink-0 w-full sm:w-auto"
         >
-          Descargar / Abrir
-        </Button>
-      </a>
+          <Button
+            variant="outline"
+            size="sm"
+            rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
+            className="w-full sm:w-auto font-bold"
+          >
+            Descargar / Abrir
+          </Button>
+        </a>
+      ) : (
+        <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">Enlace no seguro</span>
+      )}
     </div>
   );
 };

@@ -1,23 +1,30 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { Navbar } from './components/shared/Navbar';
 import { Footer } from './components/shared/Footer';
 import { MobileBottomNav } from './components/shared/MobileBottomNav';
-import { DashboardPage } from './pages/DashboardPage';
-import { CourseDetailPage } from './pages/CourseDetailPage';
-import { LessonPage } from './pages/LessonPage';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { UploadJSONPage } from './pages/UploadJSONPage';
-import { CourseWizardPage } from './pages/CourseWizardPage';
-import { MarketplacePage } from './pages/MarketplacePage';
-import { MarketplaceDetailPage } from './pages/MarketplaceDetailPage';
-import { CourseCurriculumPage } from './pages/CourseCurriculumPage';
-import { CreatorDashboardPage } from './pages/CreatorDashboardPage';
-import { CreatorGuidesPage } from './pages/CreatorGuidesPage';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
+
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const CourseDetailPage = React.lazy(() => import('./pages/CourseDetailPage').then((m) => ({ default: m.CourseDetailPage })));
+const LessonPage = React.lazy(() => import('./pages/LessonPage').then((m) => ({ default: m.LessonPage })));
+const LoginPage = React.lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const RegisterPage = React.lazy(() => import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })));
+const AdminDashboardPage = React.lazy(() => import('./pages/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })));
+const UploadJSONPage = React.lazy(() => import('./pages/UploadJSONPage').then((m) => ({ default: m.UploadJSONPage })));
+const CourseWizardPage = React.lazy(() => import('./pages/CourseWizardPage').then((m) => ({ default: m.CourseWizardPage })));
+const MarketplacePage = React.lazy(() => import('./pages/MarketplacePage').then((m) => ({ default: m.MarketplacePage })));
+const MarketplaceDetailPage = React.lazy(() => import('./pages/MarketplaceDetailPage').then((m) => ({ default: m.MarketplaceDetailPage })));
+const CourseCurriculumPage = React.lazy(() => import('./pages/CourseCurriculumPage').then((m) => ({ default: m.CourseCurriculumPage })));
+const CreatorDashboardPage = React.lazy(() => import('./pages/CreatorDashboardPage').then((m) => ({ default: m.CreatorDashboardPage })));
+const CreatorGuidesPage = React.lazy(() => import('./pages/CreatorGuidesPage').then((m) => ({ default: m.CreatorGuidesPage })));
+
+const PageLoader = () => (
+  <div className="min-h-[50dvh] flex items-center justify-center" role="status" aria-label="Cargando página">
+    <div className="w-8 h-8 border-3 border-[#0066CC] border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading } = useAuthStore();
@@ -76,6 +83,7 @@ export const App: React.FC = () => {
       <Navbar />
       <main className="flex-1 pb-20 md:pb-0">
         <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -156,6 +164,7 @@ export const App: React.FC = () => {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
       <Footer />

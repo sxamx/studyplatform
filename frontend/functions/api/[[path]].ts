@@ -401,6 +401,8 @@ export async function onRequest(context: { request: Request; env: Env; params: {
         'Referrer-Policy': 'strict-origin-when-cross-origin',
         'X-XSS-Protection': '1; mode=block',
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
         ...extraHeaders,
       },
     });
@@ -1949,6 +1951,14 @@ export async function onRequest(context: { request: Request; env: Env; params: {
       const body = await request.json() as any;
       const { bio, portfolioUrl, motivation } = body;
       if (!bio || !motivation) return json({ error: 'Biografía y motivación requeridas' }, 400);
+      if (portfolioUrl) {
+        try {
+          const parsedPortfolio = new URL(portfolioUrl);
+          if (!['http:', 'https:'].includes(parsedPortfolio.protocol)) throw new Error('unsafe protocol');
+        } catch {
+          return json({ error: 'El portafolio debe ser una URL http o https válida' }, 400);
+        }
+      }
 
       const existingApp = await db.prepare('SELECT id, status FROM creator_applications WHERE user_id = ?').bind(currentUser.id).first() as any;
       if (existingApp && existingApp.status === 'pending') {

@@ -11,7 +11,8 @@
     "build:frontend": "npm run build --prefix frontend",
     "build:backend": "npm run build --prefix backend",
     "check:api-contract": "node scripts/check_api_contract.js",
-    "build": "npm run check:api-contract && npm run build:backend && npm run build:frontend"
+    "check:pwa": "node scripts/check_pwa.js",
+    "build": "npm run check:api-contract && npm run check:pwa && npm run build:backend && npm run build:frontend"
   },
   "keywords": [
     "duolingo",

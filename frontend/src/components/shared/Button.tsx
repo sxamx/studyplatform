@@ -26,7 +26,7 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-150 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
 
   const sizeStyles = {
-    sm: 'h-8 px-3 text-xs gap-1.5',
+    sm: 'min-h-11 sm:min-h-8 px-3 text-xs gap-1.5',
     md: 'h-11 px-5 text-sm gap-2',
     lg: 'h-12 px-6 text-base gap-2.5',
   };

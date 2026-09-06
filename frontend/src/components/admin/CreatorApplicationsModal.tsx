@@ -14,6 +14,7 @@ import { apiFetch } from '../../api/client';
 import { CreatorApplication, ApplicationMessage } from '../../types';
 import { Button } from '../shared/Button';
 import { Badge } from '../shared/Badge';
+import { safeHttpUrl } from '../../utils/safeUrl';
 
 interface CreatorApplicationsModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const CreatorApplicationsModal: React.FC<CreatorApplicationsModalProps> =
 }) => {
   const [applications, setApplications] = useState<CreatorApplication[]>([]);
   const [selectedApp, setSelectedApp] = useState<CreatorApplication | null>(null);
+  const selectedPortfolioUrl = safeHttpUrl(selectedApp?.portfolioUrl);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [adminNotes, setAdminNotes] = useState('');
@@ -307,10 +309,10 @@ export const CreatorApplicationsModal: React.FC<CreatorApplicationsModalProps> =
                         Motivación & Temas
                       </span>
                       <p className="text-gray-800 dark:text-gray-200">{selectedApp.motivation}</p>
-                      {selectedApp.portfolioUrl && (
+                      {selectedPortfolioUrl && (
                         <div className="pt-2">
                           <a
-                            href={selectedApp.portfolioUrl}
+                            href={selectedPortfolioUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#0066CC] dark:text-[#4D94FF] inline-flex items-center gap-1 font-bold hover:underline"

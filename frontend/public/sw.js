@@ -1,9 +1,11 @@
 // StudyPlatform PWA Service Worker
-const CACHE_NAME = 'studyplatform-v1';
+const CACHE_NAME = 'studyplatform-shell-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
   '/pwa-icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -29,24 +31,44 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
+
+  if (url.origin !== self.location.origin) return;
 
   // Network-first for API requests
   if (url.pathname.startsWith('/api/')) {
     return;
   }
 
-  // Cache-first for navigation and static assets
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('/');
+  // Network-first navigations prevent an old cached index.html from pointing at
+  // asset hashes that no longer exist after a deployment.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/'))
+    );
+    return;
+  }
+
+  // Cache immutable Vite assets after their first successful request.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         }
-      });
-    })
-  );
+        return response;
+      }))
+    );
+  }
 });
